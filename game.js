@@ -2,7 +2,7 @@ var canvas, ctx, then;
 
 var a;
 
-var player, bullets, asteroids, score;
+var player, bullets, asteroids, score, lives;
 
 window.onload = function() {
     // init canvas
@@ -43,6 +43,7 @@ function loadImages() {
 
 function initPlayer() {
     player = {
+        dead: false,
         x: canvas.width/2,
         y: canvas.height/2,
         rot: 0,
@@ -58,6 +59,7 @@ function initPlayer() {
     };
     bullets = [];
     score = 0;
+    lives = 3;
 }
 
 let angX = 0, angY = 0;
@@ -67,6 +69,25 @@ function update(dt) {
     moveAsteroids();
     bulletLogic();
     checkCollision();
+
+    if(player.dead && lives > 0) {
+        // respawn player when appropriate
+        let isEmptyArea = true;
+        asteroids.forEach(function(e, i) {
+            let safeDistance = 40;
+            if(isInCollision(canvas.width/2 - safeDistance, safeDistance*2, safeDistance*2, canvas.height/2 + safeDistance, e.x, e.y, 32, 32)) {
+                isEmptyArea = false;
+            }
+        });
+        console.log(isEmptyArea);
+        if(isEmptyArea) {
+            player.x = canvas.width/2;
+            player.y = canvas.height/2;
+            player.velocity = 0;
+            player.rot = 0;
+            player.dead = false;
+        }
+    }
 
     function movePlayer() {
         if(keysDown["a"] || keysDown["A"]) player.rot -= player.turnSpeed;
@@ -131,7 +152,7 @@ function update(dt) {
 
         // player shooting bullets
         if(player.bullet1CooldownCurrent > 0) player.bullet1CooldownCurrent--;
-        if(player.bullet1CooldownCurrent <= 0) {
+        if(!player.dead && player.bullet1CooldownCurrent <= 0) {
             if(keysDown["j"] || keysDown["J"]) {
                 // shoot bullet
                 let b = makeBullet();
@@ -169,8 +190,13 @@ function update(dt) {
                 }
             });
 
-            if(isInCollision(e.x, e.y, 32, 32, player.x-16, player.y-16, 32, 32)) {
-                //TODO: IS ROCKET KILL?
+            if(!player.dead && isInCollision(e.x, e.y, 32, 32, player.x-16, player.y-16, 32, 32)) {
+                // declare player dead
+                player.dead = true;
+                if(lives > 0) {
+                    // remove a life if any left
+                    lives--;
+                }
             }
         });
     }
@@ -218,9 +244,9 @@ function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawDebug();
-    drawScore();
-
-    drawPlayer();
+    drawGUI();
+    if(!player.dead)
+        drawPlayer();
     drawBullets();
     drawAsteroids();
 
@@ -293,10 +319,22 @@ function render() {
         });
     }
 
-    function drawScore() {
+    function drawGUI() {
+        // draw score
         ctx.fillStyle = "white";
-        ctx.font = "12px sans-serif";
-        ctx.fillText(score, canvas.width-canvas.width/4, 14);
+        ctx.font = "18px sans-serif";
+        ctx.fillText(score, canvas.width-canvas.width/4, 20);
+
+        if(lives <= 0 && player.dead) {
+            ctx.fillStyle = "white";
+            ctx.font = "24px sans-serif";
+            ctx.fillText("DED, NOT BIG SOUPRICE", canvas.width/2, canvas.height/2);
+        }
+
+        //draw remaining lives
+        for(let i=0; i<lives; i++) {
+            ctx.drawImage(a.img.rocket1, canvas.width - 18 - i*18, canvas.height - 18, 16, 16);
+        }
     }
 
     function drawDebug() {
