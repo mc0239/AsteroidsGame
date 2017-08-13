@@ -4,6 +4,9 @@ var a; // assets variable
 
 var player, bullets, asteroids, score, lives;
 
+var debug = false;
+var safeDistance = 100;
+
 window.onload = function() {
     // init canvas
     canvas = document.getElementById("game");
@@ -54,6 +57,7 @@ function initPlayer() {
         dead: false,
         x: canvas.width/2,
         y: canvas.height/2,
+        size: 32,
         rot: 0,
 
         turnSpeed: 2,
@@ -84,8 +88,7 @@ function update(dt) {
         // respawn player when appropriate
         let isEmptyArea = true;
         asteroids.forEach(function(e, i) {
-            let safeDistance = 40;
-            if(isInCollisionAABB(canvas.width/2 - safeDistance, safeDistance*2, safeDistance*2, canvas.height/2 + safeDistance, e.x - e.size/2, e.y - e.size/2, e.size, e.size)) {
+            if(isInCollisionAABB(canvas.width/2 - safeDistance, canvas.height/2 - safeDistance, safeDistance*2, safeDistance*2, e.x - e.size/2, e.y - e.size/2, e.size, e.size)) {
                 isEmptyArea = false;
             }
         });
@@ -164,8 +167,9 @@ function update(dt) {
         if(!player.dead && player.bullet1CooldownCurrent <= 0) {
             if(keysDown["j"] || keysDown["J"]) {
                 // shoot bullet
-                let b = makeBullet(a.img.bullet1, player.rot, 8, 1, 1000);
+                let b = makeBullet(a.img.bullet1, 8, 1, 1000);
                 // move bullet to the tip of the rocket
+                b.rot = player.rot;
                 b.x += Math.sin(degToRad(b.rot)) * 34/2;
                 b.y -= Math.cos(degToRad(b.rot)) * 34/2;
                 bullets.push(b);
@@ -177,7 +181,9 @@ function update(dt) {
             if(keysDown["k"] || keysDown["K"]) {
                 // shoot bullets (alt)
                 for(let i=0; i<360; i+=36) {
-                    let b = makeBullet(a.img.bullet2, i, 2.5, 2, 350);
+                    let b = makeBullet(a.img.bullet2, 2.5, 2, 350);
+                    b.rot = i;
+                    b.size = 7;
                     bullets.push(b);
                 }
                 player.bullet2CooldownCurrent = player.bullet2Cooldown * dt;
@@ -201,7 +207,7 @@ function update(dt) {
         asteroids.forEach(function(e, i) {
             bullets.forEach(function(b, j) {
                 //if(isInCollisionAABB(e.x - e.size/2, e.y - e.size/2, e.size, e.size, b.x, b.y, 3, 3)) {
-                if(isInCollisionCirc(e.x, e.y, e.size/2, b.x, b.y, 3/2)) {
+                if(isInCollisionCirc(e.x, e.y, e.size/2, b.x, b.y, b.size/2)) {
                     bullets.splice(j, 1);
                     e.health -= b.damage;
                     score += 100;
@@ -228,7 +234,7 @@ function update(dt) {
 
             if(!player.dead) {
                 //if(isInCollisionAABB(e.x - e.size/2, e.y - e.size/2, e.size, e.size, player.x-16, player.y-16, 32, 32)) {
-                if(isInCollisionCirc(e.x, e.y, e.size/2, player.x-16, player.y-16, 32/2, 32/2)) {
+                if(isInCollisionCirc(e.x, e.y, e.size/2, player.x, player.y, player.size/2, player.size/2)) {
                     // declare player dead
                     player.dead = true;
                     if(lives > 0) {
@@ -241,12 +247,13 @@ function update(dt) {
     }
 }
 
-function makeBullet(img, rot, speed, damage, distance) {
+function makeBullet(img, speed, damage, distance) {
     let bullet = {
         img: img,
         x: player.x,
         y: player.y,
-        rot: rot,
+        size: 3,
+        rot: 0,
         speed: speed,
         damage: damage,
         distance: distance
@@ -325,7 +332,8 @@ function isInCollisionCirc(x1, y1, r1, x2, y2, r2) {
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    drawDebug();
+    if(debug)
+        drawDebug();
     drawGUI();
     if(!player.dead)
         drawPlayer();
@@ -348,7 +356,14 @@ function render() {
     }
 
     function drawPlayer() {
-        drawImageRot(a.img.rocket1, player.x - 34/2, player.y - 33/2, 34, 33, player.rot);
+        drawImageRot(a.img.rocket1, player.x - player.size/2, player.y - player.size/2, player.size, player.size, player.rot);
+        if(debug) {
+            // debug draw
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size/2, 0, 2 * Math.PI, false);
+            ctx.strokeStyle = '#FF00AA';
+            ctx.stroke();
+        }
 
         // draw offscreen pointer
         let xm = 0, ym = 0;
@@ -371,13 +386,27 @@ function render() {
 
     function drawBullets() {
         bullets.forEach(function(b) {
-            drawImageRot(b.img, b.x, b.y, 3, 3, player.rot);
+            drawImageRot(b.img, b.x - b.size/2, b.y - b.size/2, b.size, b.size, player.rot);
+            if(debug) {
+                // debug draw
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.size/2, 0, 2 * Math.PI, false);
+                ctx.strokeStyle = '#FF0000';
+                ctx.stroke();
+            }
         });
     }
 
     function drawAsteroids() {
         asteroids.forEach(function(t) {
             drawImageRot(t.img, t.x - t.size/2, t.y - t.size/2, t.size, t.size, t.rot);
+            if(debug) {
+                // debug draw
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, t.size/2, 0, 2 * Math.PI, false);
+                ctx.strokeStyle = '#FF0000';
+                ctx.stroke();
+            }
 
             // draw offscreen pointer
             let xm = 0, ym = 0;
@@ -422,6 +451,11 @@ function render() {
         ctx.font = "8px sans-serif";
         ctx.fillText(Math.round(player.x*1000)/1000, 2, 10);
         ctx.fillText(Math.round(player.y*1000)/1000, 2, 20);
+
+        // debug draw
+        ctx.beginPath();
+        ctx.strokeStyle = '#FFCC00';
+        ctx.strokeRect(canvas.width/2 - safeDistance, canvas.height/2 - safeDistance, safeDistance*2, safeDistance*2);
     }
 
 }
@@ -448,4 +482,7 @@ addEventListener("keydown", function (e) {
 
 addEventListener("keyup", function (e) {
 	delete keysDown[e.key];
+    if(e.key == "u" || e.key == "U") {
+        debug = !debug;
+    }
 }, false);
