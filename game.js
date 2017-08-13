@@ -1,6 +1,6 @@
 var canvas, ctx, then;
 
-var a;
+var a; // assets variable
 
 var player, bullets, asteroids, score, lives;
 
@@ -36,6 +36,8 @@ function loadImages() {
 
     a.img.bullet1 = new Image();
     a.img.bullet1.src = "./img/bullet1.png";
+    a.img.bullet2 = new Image();
+    a.img.bullet2.src = "./img/bullet2.png";
 
     a.img.asteroid1small = new Image();
     a.img.asteroid1small.src = "./img/asteroid1_small.png";
@@ -55,7 +57,9 @@ function initPlayer() {
         velocity: 0,
 
         bullet1Cooldown: 1000,
-        bullet1CooldownCurrent: 0
+        bullet1CooldownCurrent: 0,
+        bullet2Cooldown: 5000,
+        bullet2CooldownCurrent: 0,
     };
     bullets = [];
     score = 0;
@@ -79,7 +83,6 @@ function update(dt) {
                 isEmptyArea = false;
             }
         });
-        console.log(isEmptyArea);
         if(isEmptyArea) {
             player.x = canvas.width/2;
             player.y = canvas.height/2;
@@ -118,10 +121,10 @@ function update(dt) {
             }
         } else {
             if(player.velocity < 0) {
-                player.velocity += player.acceleration/5;
+                player.velocity += player.acceleration/8;
                 if(player.velocity >= 0) player.velocity = 0;
             } else {
-                player.velocity -= player.acceleration/5;
+                player.velocity -= player.acceleration/8;
                 if(player.velocity <= 0) player.velocity = 0;
             }
         }
@@ -155,12 +158,23 @@ function update(dt) {
         if(!player.dead && player.bullet1CooldownCurrent <= 0) {
             if(keysDown["j"] || keysDown["J"]) {
                 // shoot bullet
-                let b = makeBullet();
+                let b = makeBullet(a.img.bullet1, player.rot, 8, 1, 1000);
                 // move bullet to the tip of the rocket
                 b.x += Math.sin(degToRad(b.rot)) * 34/2;
                 b.y -= Math.cos(degToRad(b.rot)) * 34/2;
                 bullets.push(b);
                 player.bullet1CooldownCurrent = player.bullet1Cooldown * dt;
+            }
+        }
+        if(player.bullet2CooldownCurrent > 0) player.bullet2CooldownCurrent--;
+        if(!player.dead && player.bullet2CooldownCurrent <= 0) {
+            if(keysDown["k"] || keysDown["K"]) {
+                // shoot bullets (alt)
+                for(let i=0; i<360; i+=22.5) {
+                    let b = makeBullet(a.img.bullet2, i, 10, 2, 80);
+                    bullets.push(b);
+                }
+                player.bullet2CooldownCurrent = player.bullet2Cooldown * dt;
             }
         }
     }
@@ -182,7 +196,7 @@ function update(dt) {
             bullets.forEach(function(b, j) {
                 if(isInCollision(e.x, e.y, 32, 32, b.x, b.y, 3, 3)) {
                     bullets.splice(j, 1);
-                    e.health--;
+                    e.health -= b.damage;
                     score += 100;
                     if(e.health <= 0) {
                         asteroids.splice(i, 1);
@@ -202,13 +216,15 @@ function update(dt) {
     }
 }
 
-function makeBullet() {
+function makeBullet(img, rot, speed, damage, distance) {
     let bullet = {
+        img: img,
         x: player.x,
         y: player.y,
-        rot: player.rot,
-        speed: 8,
-        distance: 1000
+        rot: rot,
+        speed: speed,
+        damage: damage,
+        distance: distance
     };
     return bullet;
 }
@@ -291,7 +307,7 @@ function render() {
 
     function drawBullets() {
         bullets.forEach(function(b) {
-            drawImageRot(a.img.bullet1, b.x, b.y, 3, 3, player.rot);
+            drawImageRot(b.img, b.x, b.y, 3, 3, player.rot);
         });
     }
 
