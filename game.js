@@ -39,8 +39,14 @@ function loadImages() {
     a.img.bullet2 = new Image();
     a.img.bullet2.src = "./img/bullet2.png";
 
-    a.img.asteroid1small = new Image();
-    a.img.asteroid1small.src = "./img/asteroid1_small.png";
+    a.img.asteroid1_1 = new Image();
+    a.img.asteroid1_1.src = "./img/asteroid1_1.png";
+    a.img.asteroid1_2 = new Image();
+    a.img.asteroid1_2.src = "./img/asteroid1_2.png";
+    a.img.asteroid1_3 = new Image();
+    a.img.asteroid1_3.src = "./img/asteroid1_3.png";
+    a.img.asteroid1_4 = new Image();
+    a.img.asteroid1_4.src = "./img/asteroid1_4.png";
 }
 
 function initPlayer() {
@@ -79,7 +85,7 @@ function update(dt) {
         let isEmptyArea = true;
         asteroids.forEach(function(e, i) {
             let safeDistance = 40;
-            if(isInCollision(canvas.width/2 - safeDistance, safeDistance*2, safeDistance*2, canvas.height/2 + safeDistance, e.x, e.y, 32, 32)) {
+            if(isInCollisionAABB(canvas.width/2 - safeDistance, safeDistance*2, safeDistance*2, canvas.height/2 + safeDistance, e.x - e.size/2, e.y - e.size/2, e.size, e.size)) {
                 isEmptyArea = false;
             }
         });
@@ -170,8 +176,8 @@ function update(dt) {
         if(!player.dead && player.bullet2CooldownCurrent <= 0) {
             if(keysDown["k"] || keysDown["K"]) {
                 // shoot bullets (alt)
-                for(let i=0; i<360; i+=22.5) {
-                    let b = makeBullet(a.img.bullet2, i, 10, 2, 80);
+                for(let i=0; i<360; i+=36) {
+                    let b = makeBullet(a.img.bullet2, i, 2.5, 2, 350);
                     bullets.push(b);
                 }
                 player.bullet2CooldownCurrent = player.bullet2Cooldown * dt;
@@ -194,22 +200,41 @@ function update(dt) {
     function checkCollision() {
         asteroids.forEach(function(e, i) {
             bullets.forEach(function(b, j) {
-                if(isInCollision(e.x, e.y, 32, 32, b.x, b.y, 3, 3)) {
+                //if(isInCollisionAABB(e.x - e.size/2, e.y - e.size/2, e.size, e.size, b.x, b.y, 3, 3)) {
+                if(isInCollisionCirc(e.x, e.y, e.size/2, b.x, b.y, 3/2)) {
                     bullets.splice(j, 1);
                     e.health -= b.damage;
                     score += 100;
                     if(e.health <= 0) {
+                        // split asteroid into pieces if size > 1
                         asteroids.splice(i, 1);
+                        let newSize = 5;
+                        if(e.size == 250) {
+                            newSize = 3;
+                        } else if(e.size == 125) {
+                            newSize = 2;
+                        } else if(e.size == 60) {
+                            newSize = 1;
+                        }
+                        for(let k=0; k<5-newSize; k++) {
+                            let t = makeAsteroid(newSize);
+                            t.x = e.x;
+                            t.y = e.y;
+                            asteroids.push(t);
+                        }
                     }
                 }
             });
 
-            if(!player.dead && isInCollision(e.x, e.y, 32, 32, player.x-16, player.y-16, 32, 32)) {
-                // declare player dead
-                player.dead = true;
-                if(lives > 0) {
-                    // remove a life if any left
-                    lives--;
+            if(!player.dead) {
+                //if(isInCollisionAABB(e.x - e.size/2, e.y - e.size/2, e.size, e.size, player.x-16, player.y-16, 32, 32)) {
+                if(isInCollisionCirc(e.x, e.y, e.size/2, player.x-16, player.y-16, 32/2, 32/2)) {
+                    // declare player dead
+                    player.dead = true;
+                    if(lives > 0) {
+                        // remove a life if any left
+                        lives--;
+                    }
                 }
             }
         });
@@ -229,21 +254,52 @@ function makeBullet(img, rot, speed, damage, distance) {
     return bullet;
 }
 
-function makeAsteroid() {
+function makeAsteroid(size) {
     let asteroid = {
+        img: null,
         x: Math.ceil(Math.random()*1000) - 100,
         y: Math.ceil(Math.random()*800) - 100,
+        size: 0,
         rot: Math.ceil(Math.random()*360),
-        speed: 3,
-        health: 4
+        speed: 0,
+        health: 0
     };
+    switch(size) {
+        case 1:
+            asteroid.img = a.img.asteroid1_1;
+            asteroid.speed = 3;
+            asteroid.health = 1;
+            asteroid.size = 30;
+            break;
+        case 2:
+            asteroid.img = a.img.asteroid1_2;
+            asteroid.speed = 2;
+            asteroid.health = 2;
+            asteroid.size = 60;
+            break;
+        case 3:
+            asteroid.img = a.img.asteroid1_3;
+            asteroid.speed = 1.5;
+            asteroid.health = 4;
+            asteroid.size = 125;
+            break;
+        case 4:
+            asteroid.img = a.img.asteroid1_4;
+            asteroid.speed = 0.8;
+            asteroid.health = 8;
+            asteroid.size = 250;
+            break;
+        default:
+            // EXCEPTION
+        break;
+    }
     return asteroid;
 }
 
 function generateAsteroidWave() {
     asteroids = [];
-    for(let i=0; i<8; i++) {
-        asteroids.push(makeAsteroid());
+    for(let i=0; i<2; i++) {
+        asteroids.push(makeAsteroid(4));
     }
 }
 
@@ -251,8 +307,18 @@ function degToRad(deg) {
     return deg * Math.PI / 180;
 }
 
-function isInCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
+// https://developer.mozilla.org/en-US/docs/Games/Techniques/2D_collision_detection
+function isInCollisionAABB(x1, y1, w1, h1, x2, y2, w2, h2) {
     if (x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && h1 + y1 > y2) return true;
+    else return false;
+}
+
+function isInCollisionCirc(x1, y1, r1, x2, y2, r2) {
+    var dx = x1 - x2;
+    var dy = y1 - y2;
+    var distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < r1 + r2) return true;
     else return false;
 }
 
@@ -265,8 +331,6 @@ function render() {
         drawPlayer();
     drawBullets();
     drawAsteroids();
-
-    //ctx.drawImage(a.img.asteroid1small, 50, 50);
 
     // https://stackoverflow.com/questions/2677671/how-do-i-rotate-a-single-object-on-an-html-5-canvas#11985464
     function drawImageRot(img, x, y, width, height, deg){
@@ -313,7 +377,7 @@ function render() {
 
     function drawAsteroids() {
         asteroids.forEach(function(t) {
-            drawImageRot(a.img.asteroid1small, t.x, t.y, 32, 32, t.rot);
+            drawImageRot(t.img, t.x - t.size/2, t.y - t.size/2, t.size, t.size, t.rot);
 
             // draw offscreen pointer
             let xm = 0, ym = 0;
