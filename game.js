@@ -5,6 +5,7 @@ var a; // assets variable
 var player, bullets, asteroids, score, lives;
 
 var debug = false;
+var pause = false;
 var safeDistance = 100;
 
 window.onload = function() {
@@ -22,8 +23,8 @@ window.onload = function() {
     loadImages();
 
     then = Date.now();
-    initPlayer();
-    generateAsteroidWave();
+
+    startNewGame();
     main();
 };
 
@@ -52,6 +53,11 @@ function loadImages() {
     a.img.asteroid1_4.src = "./img/asteroid1_4.png";
 }
 
+function startNewGame() {
+    initPlayer();
+    generateAsteroidWave();
+}
+
 function initPlayer() {
     player = {
         dead: false,
@@ -78,6 +84,8 @@ function initPlayer() {
 
 let angX = 0, angY = 0;
 function update(dt) {
+
+    if(pause) return;
 
     movePlayer();
     moveAsteroids();
@@ -181,7 +189,7 @@ function update(dt) {
             if(keysDown["k"] || keysDown["K"]) {
                 // shoot bullets (alt)
                 for(let i=0; i<360; i+=36) {
-                    let b = makeBullet(a.img.bullet2, 2.5, 2, 350);
+                    let b = makeBullet(a.img.bullet2, 2.5, 2, 250);
                     b.rot = i;
                     b.size = 7;
                     bullets.push(b);
@@ -482,7 +490,7 @@ addEventListener("keydown", function (e) {
 
 addEventListener("keyup", function (e) {
 	delete keysDown[e.key];
-    if(e.key == "u" || e.key == "U") {
-        debug = !debug;
-    }
+    if(e.key == "u" || e.key == "U") debug = !debug;
+    if(e.key == "p" || e.key == "P") pause = !pause;
+    if(e.key == "r" || e.key == "R") startNewGame();
 }, false);
