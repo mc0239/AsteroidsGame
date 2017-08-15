@@ -2,7 +2,7 @@ var canvas, ctx, then;
 
 var a; // assets variable
 
-var player, bullets, asteroids, score, lives, level;
+var player, bullets, asteroids, explosions, score, lives, level, time;
 
 var debug = false;
 var pause = false;
@@ -32,6 +32,11 @@ function loadImages() {
     a.img.font1 = new Image();
     a.img.font1.src = "./img/font1.png";
 
+    a.img.explosionBlue = new Image();
+    a.img.explosionBlue.src = "./img/explosion_blue.png";
+    a.img.explosionRed = new Image();
+    a.img.explosionRed.src = "./img/explosion_red.png";
+
     a.img.rocket1 = new Image();
     a.img.rocket1.src = "./img/rocket1.png";
 
@@ -59,7 +64,9 @@ function loadImages() {
 function startNewGame() {
     initPlayer();
     level = 1;
+    time = 0;
     generateAsteroidWave(level);
+    explosions = [];
 }
 
 function initPlayer() {
@@ -91,13 +98,16 @@ function initPlayer() {
 
 let angX = 0, angY = 0;
 function update(dt) {
-
     if(pause) return;
+
+    time += dt;
+
 
     movePlayer();
     moveAsteroids();
     bulletLogic();
     checkCollision();
+    updateExplosions();
 
     if(player.isDead && lives > 0) {
         // respawn player when appropriate
@@ -230,6 +240,10 @@ function update(dt) {
                 //if(isInCollisionAABB(e.x - e.size/2, e.y - e.size/2, e.size, e.size, b.x, b.y, 3, 3)) {
                 if(isInCollisionCirc(e.x, e.y, e.size/2, b.x, b.y, b.size/2)) {
                     bullets.splice(j, 1);
+
+                    if(b.img == a.img.bullet1) explosions.push(makeExplosion(a.img.explosionBlue, b.x, b.y, 15, 4));
+                    else if(b.img == a.img.bullet2) explosions.push(makeExplosion(a.img.explosionRed, b.x, b.y, 15, 8));
+
                     e.health -= b.damage;
                     score += 100;
                     if(e.health <= 0) {
@@ -263,6 +277,18 @@ function update(dt) {
                         lives--;
                     }
                 }
+            }
+        });
+    }
+
+    function updateExplosions() {
+        explosions.forEach(function(e, i) {
+            e.drawDt += dt;
+            if(e.drawDt > 0.08) {
+                e.frame++;
+                e.drawDt = 0;
+                // remove explosion when done
+                if(e.frame > 5) explosions.splice(i, 1);
             }
         });
     }
@@ -322,6 +348,19 @@ function makeAsteroid(size) {
         break;
     }
     return asteroid;
+}
+
+function makeExplosion(img, x, y, size, drawSize = size) {
+    let explosion = {
+        img: img,
+        x: x,
+        y: y,
+        drawSize: drawSize,
+        drawDt: 0,
+        size: size,
+        frame: 0
+    };
+    return explosion;
 }
 
 var levels = [
@@ -411,13 +450,12 @@ function drawFont(fontImage, x, y, word, scale = 1) {
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if(debug)
-        drawDebug();
+    if(debug) drawDebug();
     drawGUI();
-    if(!player.isDead)
-        drawPlayer();
+    if(!player.isDead) drawPlayer();
     drawBullets();
     drawAsteroids();
+    drawExplosions();
 
     // https://stackoverflow.com/questions/2677671/how-do-i-rotate-a-single-object-on-an-html-5-canvas#11985464
     function drawImageRot(img, x, y, width, height, deg){
@@ -507,6 +545,12 @@ function render() {
         });
     }
 
+    function drawExplosions() {
+        explosions.forEach(function(e) {
+            ctx.drawImage(e.img, e.size*e.frame, 0, e.size, e.size, e.x-e.drawSize/2, e.y-e.drawSize/2, e.drawSize, e.drawSize);
+        });
+    }
+
     function drawGUI() {
         // draw score
         drawFont(a.img.font1, canvas.width*3/4, 10, "" + score);
@@ -534,6 +578,8 @@ function render() {
         ctx.fillText(Math.round(player.x*1000)/1000, 2, 10);
         ctx.fillText(Math.round(player.y*1000)/1000, 2, 20);
 
+        ctx.fillText(Math.floor(time), 2, 30);
+
         // debug draw
         ctx.beginPath();
         ctx.strokeStyle = '#FFCC00';
@@ -544,10 +590,10 @@ function render() {
 
 function main() {
 	var now = Date.now();
-	var delta = now - then;
+	var delta = (now - then) / 1000;
 
-	update(delta / 1000);
-	render();
+	update(delta);
+	render(delta);
 
 	then = now;
 
