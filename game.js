@@ -2,7 +2,7 @@ var canvas, ctx, then;
 
 var a; // assets variable
 
-var player, bullets, asteroids, explosions, score, lives, level, time;
+var player, bullets, asteroids, explosions, pickups, score, lives, level, time;
 
 var debug = false;
 var pause = false;
@@ -21,6 +21,7 @@ window.onload = function() {
         snd: {}
     };
     loadImages();
+    loadSound();
 
     then = Date.now();
 
@@ -36,6 +37,8 @@ function loadImages() {
     a.img.explosionBlue.src = "./img/explosion_blue.png";
     a.img.explosionRed = new Image();
     a.img.explosionRed.src = "./img/explosion_red.png";
+    a.img.explosionBig = new Image();
+    a.img.explosionBig.src = "./img/explosion_big.png";
 
     a.img.rocket1 = new Image();
     a.img.rocket1.src = "./img/rocket1.png";
@@ -59,6 +62,32 @@ function loadImages() {
     a.img.asteroid1_3.src = "./img/asteroid1_3.png";
     a.img.asteroid1_4 = new Image();
     a.img.asteroid1_4.src = "./img/asteroid1_4.png";
+
+    a.img.pickup = new Image();
+    a.img.pickup.src = "./img/pickup.png";
+}
+
+function loadSound() {
+    a.snd.shoot1 = new Audio();
+    a.snd.shoot1.src = "./snd/shoot1.wav";
+    a.snd.shoot1.volume = 0.4;
+    a.snd.shoot2 = new Audio();
+    a.snd.shoot2.src = "./snd/shoot2.wav";
+    a.snd.shoot2.volume = 0.4;
+
+    a.snd.explosion = new Audio();
+    a.snd.explosion.src = "./snd/explosion.wav";
+
+    a.snd.win = new Audio();
+    a.snd.win.volume = 0.55;
+    a.snd.win.src = "./snd/win.wav";
+
+    a.snd.pickup = new Audio();
+    a.snd.pickup.volume = 0.55;
+    a.snd.pickup.src = "./snd/pickup.wav";
+    a.snd.pickup2 = new Audio();
+    a.snd.pickup2.volume = 0.55;
+    a.snd.pickup2.src = "./snd/pickup2.wav";
 }
 
 function startNewGame() {
@@ -67,6 +96,7 @@ function startNewGame() {
     time = 0;
     generateAsteroidWave(level);
     explosions = [];
+    pickups = [];
 }
 
 function initPlayer() {
@@ -97,17 +127,19 @@ function initPlayer() {
 }
 
 let angX = 0, angY = 0;
+let pickupCooloff = 10;
 function update(dt) {
     if(pause) return;
 
     time += dt;
-
+    pickupCooloff -= dt;
 
     movePlayer();
     moveAsteroids();
     bulletLogic();
     checkCollision();
     updateExplosions();
+    pickupLogic();
 
     if(player.isDead && lives > 0) {
         // respawn player when appropriate
@@ -129,6 +161,8 @@ function update(dt) {
     if(asteroids.length == 0) {
         level++;
         lives++;
+        a.snd.win.play();
+        a.snd.win.currentTime = 0;
         generateAsteroidWave(level);
     }
 
@@ -270,12 +304,36 @@ function update(dt) {
             if(!player.isDead) {
                 //if(isInCollisionAABB(e.x - e.size/2, e.y - e.size/2, e.size, e.size, player.x-16, player.y-16, 32, 32)) {
                 if(isInCollisionCirc(e.x, e.y, e.size/2, player.x, player.y, player.collisionSize/2)) {
+
+                    for(let i=0; i<3; i++) {
+                        let randX = Math.random()*30 -15;
+                        let randY = Math.random()*30 -15;
+                        let expl = makeExplosion(a.img.explosionBig, player.x + randX, player.y + randY, 30, 40);
+                        // delay explosion by setting negative drawDt
+                        expl.drawDt -= i*0.15;
+                        explosions.push(expl);
+                    }
+
                     // declare player dead
                     player.isDead = true;
                     if(lives > 0) {
                         // remove a life if any left
                         lives--;
                     }
+                }
+            }
+        });
+        pickups.forEach(function(p, i) {
+            if(isInCollisionCirc(p.x, p.y, p.size/2, player.x, player.y, player.size/2)) {
+                pickups.splice(i, 1);
+                if(p.content == "score") {
+                    score += p.amount;
+                    a.snd.pickup.play();
+                    a.snd.pickup.currentTime = 0;
+                } else if(p.content == "life") {
+                    lives += p.amount;
+                    a.snd.pickup2.play();
+                    a.snd.pickup2.currentTime = 0;
                 }
             }
         });
@@ -292,6 +350,29 @@ function update(dt) {
             }
         });
     }
+
+    function pickupLogic() {
+        if(pickupCooloff <= 0) {
+            // spawn pickup
+            pickups.push(makePickup(a.img.pickup, 19));
+            pickupCooloff = 20;
+        }
+
+        pickups.forEach(function(p) {
+            // move pickups
+            p.x += Math.sin(degToRad(p.rot)) * p.speed;
+            p.y -= Math.cos(degToRad(p.rot)) * p.speed;
+
+            //slowly rotate em
+            p.drawRot += p.speed * 0.25;
+
+            // wrap around
+            if(p.x < -100) p.x = canvas.width + 100;
+            if(p.x > canvas.width+100) p.x = -100;
+            if(p.y < -100) p.y = canvas.height + 100;
+            if(p.y > canvas.height+100) p.y = -100;
+        });
+    }
 }
 
 function makeBullet(img, speed, damage, distance) {
@@ -305,6 +386,13 @@ function makeBullet(img, speed, damage, distance) {
         damage: damage,
         distance: distance
     };
+    if(img == a.img.bullet1) {
+        a.snd.shoot1.play();
+        a.snd.shoot1.currentTime = 0;
+    } else if(img == a.img.bullet2) {
+        a.snd.shoot2.play();
+        a.snd.shoot2.currentTime = 0;
+    }
     return bullet;
 }
 
@@ -360,7 +448,28 @@ function makeExplosion(img, x, y, size, drawSize = size) {
         size: size,
         frame: 0
     };
+    a.snd.explosion.play();
+    a.snd.explosion.currentTime = 0;
     return explosion;
+}
+
+function makePickup(img, size) {
+    let pickup = {
+        img: img,
+        x: Math.ceil(Math.random()*1000) - 100,
+        y: Math.ceil(Math.random()*800) - 100,
+        rot: Math.ceil(Math.random()*360),
+        drawRot: Math.ceil(Math.random()*360),
+        size: size,
+        speed: 1,
+        content: "score",
+        amount: 10000
+    };
+    if(Math.random() < 0.1) {
+        pickup.content = "life";
+        pickup.amount = 1;
+    }
+    return pickup;
 }
 
 var levels = [
@@ -452,8 +561,9 @@ function render() {
 
     if(debug) drawDebug();
     drawGUI();
-    if(!player.isDead) drawPlayer();
     drawBullets();
+    if(!player.isDead) drawPlayer();
+    drawPickups();
     drawAsteroids();
     drawExplosions();
 
@@ -547,7 +657,20 @@ function render() {
 
     function drawExplosions() {
         explosions.forEach(function(e) {
-            ctx.drawImage(e.img, e.size*e.frame, 0, e.size, e.size, e.x-e.drawSize/2, e.y-e.drawSize/2, e.drawSize, e.drawSize);
+            if(e.drawDt >= 0) ctx.drawImage(e.img, e.size*e.frame, 0, e.size, e.size, e.x-e.drawSize/2, e.y-e.drawSize/2, e.drawSize, e.drawSize);
+        });
+    }
+
+    function drawPickups() {
+        pickups.forEach(function(p) {
+            drawImageRot(p.img, p.x-p.size/2, p.y-p.size/2, p.size, p.size, p.drawRot);
+            if(debug) {
+                // debug draw
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size/2, 0, 2 * Math.PI, false);
+                ctx.strokeStyle = '#FF2299';
+                ctx.stroke();
+            }
         });
     }
 
