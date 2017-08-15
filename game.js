@@ -97,6 +97,7 @@ function startNewGame() {
     generateAsteroidWave(level);
     explosions = [];
     pickups = [];
+    bonusScore.blinks = -1;
 }
 
 function initPlayer() {
@@ -127,12 +128,25 @@ function initPlayer() {
 }
 
 let angX = 0, angY = 0;
-let pickupCooloff = 10;
+let pickupCooldown = 20;
+let bonusScore = {
+    amount: 0,
+    drawTime: 0,
+    blinks: -1
+};
+let waveCompleteTime = 0;
 function update(dt) {
     if(pause) return;
 
     time += dt;
-    pickupCooloff -= dt;
+    pickupCooldown -= dt;
+    if(bonusScore.drawTime > 0) {
+        bonusScore.drawTime -= dt;
+    } else if(bonusScore.blinks >= 0) {
+        bonusScore.blinks--;
+        bonusScore.drawTime = 0.5;
+    }
+    if(waveCompleteTime > 0) waveCompleteTime -= dt;
 
     movePlayer();
     moveAsteroids();
@@ -161,8 +175,12 @@ function update(dt) {
     if(asteroids.length == 0) {
         level++;
         lives++;
+        score += 5000;
+        bonusScore.amount = 5000;
+        bonusScore.blinks = 3;
         a.snd.win.play();
         a.snd.win.currentTime = 0;
+        waveCompleteTime = 2;
         generateAsteroidWave(level);
     }
 
@@ -324,16 +342,20 @@ function update(dt) {
             }
         });
         pickups.forEach(function(p, i) {
-            if(isInCollisionCirc(p.x, p.y, p.size/2, player.x, player.y, player.size/2)) {
-                pickups.splice(i, 1);
-                if(p.content == "score") {
-                    score += p.amount;
-                    a.snd.pickup.play();
-                    a.snd.pickup.currentTime = 0;
-                } else if(p.content == "life") {
-                    lives += p.amount;
-                    a.snd.pickup2.play();
-                    a.snd.pickup2.currentTime = 0;
+            if(!player.isDead) {
+                if(isInCollisionCirc(p.x, p.y, p.size/2, player.x, player.y, player.size/2)) {
+                    pickups.splice(i, 1);
+                    if(p.content == "score") {
+                        score += p.amount;
+                        bonusScore.amount = p.amount;
+                        bonusScore.blinks = 3;
+                        a.snd.pickup.play();
+                        a.snd.pickup.currentTime = 0;
+                    } else if(p.content == "life") {
+                        lives += p.amount;
+                        a.snd.pickup2.play();
+                        a.snd.pickup2.currentTime = 0;
+                    }
                 }
             }
         });
@@ -352,10 +374,10 @@ function update(dt) {
     }
 
     function pickupLogic() {
-        if(pickupCooloff <= 0) {
+        if(pickupCooldown <= 0) {
             // spawn pickup
             pickups.push(makePickup(a.img.pickup, 19));
-            pickupCooloff = 20;
+            pickupCooldown = 20;
         }
 
         pickups.forEach(function(p) {
@@ -677,6 +699,9 @@ function render() {
     function drawGUI() {
         // draw score
         drawFont(a.img.font1, canvas.width*3/4, 10, "" + score);
+        if(bonusScore.drawTime > 0.25) {
+            drawFont(a.img.font1, canvas.width*3/4, 35, "+" + bonusScore.amount);
+        }
 
         if(lives <= 0 && player.isDead) {
             drawFont(a.img.font1, canvas.width*3/5, canvas.height*4/5, "Boom. Dead.", 1.25);
@@ -684,6 +709,10 @@ function render() {
 
         if(pause) {
             drawFont(a.img.font1, canvas.width/2 - 82, 150, "GAME PAUSED", 1.5);
+        }
+
+        if(waveCompleteTime > 0) {
+            drawFont(a.img.font1, canvas.width/2 - 77, 10, "Wave complete!", 1.1);
         }
 
         //draw remaining lives
