@@ -2,7 +2,7 @@ var canvas, ctx, then;
 
 var a; // assets variable
 
-var player, bullets, asteroids, score, lives;
+var player, bullets, asteroids, score, lives, level;
 
 var debug = false;
 var pause = false;
@@ -29,6 +29,9 @@ window.onload = function() {
 };
 
 function loadImages() {
+    a.img.font1 = new Image();
+    a.img.font1.src = "./img/font1.png";
+
     a.img.rocket1 = new Image();
     a.img.rocket1.src = "./img/rocket1.png";
 
@@ -55,7 +58,8 @@ function loadImages() {
 
 function startNewGame() {
     initPlayer();
-    generateAsteroidWave();
+    level = 1;
+    generateAsteroidWave(level);
 }
 
 function initPlayer() {
@@ -110,6 +114,12 @@ function update(dt) {
             player.rot = 0;
             player.isDead = false;
         }
+    }
+
+    if(asteroids.length == 0) {
+        level++;
+        lives++;
+        generateAsteroidWave(level);
     }
 
     function movePlayer() {
@@ -314,10 +324,37 @@ function makeAsteroid(size) {
     return asteroid;
 }
 
-function generateAsteroidWave() {
+var levels = [
+    [2, 1],
+    [2, 2],
+    [3, 2],
+    [4],
+    [3, 3, 3],
+    [4, 2, 2],
+    [4, 2, 1, 1, 1],
+    [4, 3, 3],
+    [3, 3, 3, 3, 3],
+    [4, 4, 2],
+    [4, 4, 3, 1, 1],
+    [4, 4, 4],
+    [4, 4, 4, 1],
+    [4, 4, 3, 3, 2],
+    [4, 4, 4, 3]
+];
+
+function generateAsteroidWave(level) {
     asteroids = [];
-    for(let i=0; i<2; i++) {
-        asteroids.push(makeAsteroid(4));
+    let j = 0;
+    if(level > 14) {
+        j = level-14;
+        level = 14;
+    }
+    let le = levels[level-1];
+    for(let i=0; i<le.length; i++) {
+        asteroids.push(makeAsteroid(le[i]));
+    }
+    for(let k=0; k<j; k++) {
+        asteroids.push(makeAsteroid(le[2]));
     }
 }
 
@@ -338,6 +375,37 @@ function isInCollisionCirc(x1, y1, r1, x2, y2, r2) {
 
     if (distance < r1 + r2) return true;
     else return false;
+}
+
+var fontMap = {
+    ' ': 0, '!': 1, '\"': 2,
+    '#': 3, '$': 4, '%': 5, '&': 6, '\'': 7,
+    '(': 8, ')': 9, '*': 10, '+': 11, ',': 12,
+    '-': 13, '.': 14, '/': 15,
+    '0': 16, '1': 17, '2': 18, '3': 19, '4': 20,
+    '5': 21, '6': 22, '7': 23, '8': 24, '9': 25,
+    ':': 26, ';': 27, '<': 28, '=': 29, '>': 30,
+    '?': 31, '@': 32,
+    'A': 33, 'B': 34, 'C': 35, 'D': 36, 'E': 37,
+    'F': 38, 'G': 39, 'H': 40, 'I': 41, 'J': 42,
+    'K': 43, 'L': 44, 'M': 45, 'N': 46, 'O': 47,
+    'P': 48, 'Q': 49, 'R': 50, 'S': 51, 'T': 52,
+    'U': 53, 'V': 54, 'W': 55, 'X': 56, 'Y': 57,
+    'Z': 58,
+    '[': 59, '\\': 60, ']': 61, '\^': 62, '_': 63,
+    '`': 64,
+    'a': 65, 'b': 66, 'c': 67, 'd': 68, 'e': 69,
+    'f': 70, 'g': 71, 'h': 72, 'i': 73, 'j': 74,
+    'k': 75, 'l': 76, 'm': 77, 'n': 78, 'o': 79,
+    'p': 80, 'q': 81, 'r': 82, 's': 83, 't': 84,
+    'u': 85, 'v': 86, 'w': 87, 'x': 88, 'y': 89,
+    'z': 90,
+    '{': 91, '|': 92, '}': 93, '~': 94
+};
+function drawFont(fontImage, x, y, word, scale = 1) {
+    for(let i=0; i<word.length; i++) {
+        ctx.drawImage(fontImage, 10*fontMap[word[i]], 0, 10, 24, x + (10*i*scale), y, 10*scale, 24*scale);
+    }
 }
 
 function render() {
@@ -441,20 +509,23 @@ function render() {
 
     function drawGUI() {
         // draw score
-        ctx.fillStyle = "white";
-        ctx.font = "18px sans-serif";
-        ctx.fillText(score, canvas.width-canvas.width/4, 20);
+        drawFont(a.img.font1, canvas.width*3/4, 10, "" + score);
 
         if(lives <= 0 && player.isDead) {
-            ctx.fillStyle = "white";
-            ctx.font = "20px sans-serif";
-            ctx.fillText("Your spacecraft was smashed by an asteroid.", canvas.width*2/5, canvas.height*4/5);
+            drawFont(a.img.font1, canvas.width*3/5, canvas.height*4/5, "Boom. Dead.", 1.25);
+        }
+
+        if(pause) {
+            drawFont(a.img.font1, canvas.width/2 - 82, 150, "GAME PAUSED", 1.5);
         }
 
         //draw remaining lives
         for(let i=0; i<lives; i++) {
-            ctx.drawImage(a.img.rocket1, canvas.width - 18 - i*18, canvas.height - 18, 16, 16);
+            ctx.drawImage(a.img.rocket1, canvas.width - 30 - i*22, canvas.height - 30, 20, 20);
         }
+
+        //draw wave count
+        drawFont(a.img.font1, 10, canvas.height-30, "Wave " + level);
     }
 
     function drawDebug() {
