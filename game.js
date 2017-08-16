@@ -2,11 +2,14 @@ var canvas, ctx, then;
 
 var a; // assets variable
 
-var player, bullets, asteroids, explosions, pickups, score, lives, level, time;
+var player, bullets, asteroids, explosions, pickups, score, lives, level, time, achievements, selectedAchievement;
 
 var debug = false;
 var pause = false;
 var safeDistance = 100;
+var pickupCooldown = 0;
+var bonusScoreDisplay = {amount: 0, drawTime: 0, blinks: -1};
+var waveCompleteTime = 0;
 
 window.onload = function() {
     // init canvas
@@ -22,6 +25,18 @@ window.onload = function() {
     };
     loadImages();
     loadSound();
+
+    achievements = [
+        ["How do you turn this on", false, "Complete a wave without accelerating", 0],
+        ["Backwards compatible", false, "Complete a wave while moving only backwards"],
+        ["Not worth it", false, "Do less than 3 damage with charged shot"],
+        ["Actually worth it", false, "Do more than 20 damage with charged shot"],
+        ["I AM FULLY CHARGED", false, "Get an extra charge pickup while already fully charged"],
+        ["Reckless driving", false, "Die twice within 3 seconds", 0],
+    ];
+    selectedAchievement = 0;
+
+    loadAchievements();
 
     then = Date.now();
 
@@ -63,8 +78,20 @@ function loadImages() {
     a.img.asteroid1_4 = new Image();
     a.img.asteroid1_4.src = "./img/asteroid1_4.png";
 
-    a.img.pickup = new Image();
-    a.img.pickup.src = "./img/pickup.png";
+    a.img.pickup0 = new Image();
+    a.img.pickup0.src = "./img/pickup0.png";
+
+    a.img.achievement0 = new Image();
+    a.img.achievement0.src = "./img/achievement_off.png";
+    a.img.achievement1 = new Image();
+    a.img.achievement1.src = "./img/achievement_on.png";
+    a.img.achievementS = new Image();
+    a.img.achievementS.src = "./img/achievement_select.png";
+
+    a.img.barFull = new Image();
+    a.img.barFull.src = "./img/bar_full.png";
+    a.img.barEmpty = new Image();
+    a.img.barEmpty.src = "./img/bar_empty.png";
 }
 
 function loadSound() {
@@ -82,12 +109,36 @@ function loadSound() {
     a.snd.win.volume = 0.55;
     a.snd.win.src = "./snd/win.wav";
 
+    a.snd.charge = new Audio();
+    a.snd.charge.volume = 0.55;
+    a.snd.charge.src = "./snd/charge.wav";
+
     a.snd.pickup = new Audio();
     a.snd.pickup.volume = 0.55;
     a.snd.pickup.src = "./snd/pickup.wav";
     a.snd.pickup2 = new Audio();
     a.snd.pickup2.volume = 0.55;
     a.snd.pickup2.src = "./snd/pickup2.wav";
+    a.snd.pickup3 = new Audio();
+    a.snd.pickup3.volume = 0.55;
+    a.snd.pickup3.src = "./snd/pickup3.wav";
+}
+
+function saveAchievements() {
+    let t = "";
+    for(let i=0; i<achievements.length; i++) {
+        if(achievements[i][1]) t += "" + 1;
+        else t += "" + 0;
+    }
+    createCookie("ach", t, 365);
+}
+
+function loadAchievements() {
+    let t = readCookie("ach");
+    if(t == null) return;
+    for(let i=0; i<t.length; i++) {
+        if(t[i] == 1) achievements[i][1] = true;
+    }
 }
 
 function startNewGame() {
@@ -97,7 +148,7 @@ function startNewGame() {
     generateAsteroidWave(level);
     explosions = [];
     pickups = [];
-    bonusScore.blinks = -1;
+    bonusScoreDisplay.blinks = -1;
 }
 
 function initPlayer() {
@@ -111,7 +162,7 @@ function initPlayer() {
         collisionSize: 32,
         rot: 0,
 
-        turnSpeed: 2,
+        turnSpeed: 2.2,
 
         maxSpeed: 3,
         acceleration: 0.1,
@@ -121,6 +172,30 @@ function initPlayer() {
         bullet1CooldownCurrent: 0,
         bullet2Cooldown: 5000,
         bullet2CooldownCurrent: 0,
+        bullet3Charge: 0,
+        bullet3maxCharge: 10,
+
+        addCharge: function(amount) {
+            if(player.bullet3Charge < 10) {
+                player.bullet3Charge += amount;
+                if(player.bullet3Charge >= 10) {
+                    a.snd.charge.play();
+                    a.snd.charge.currentTime = 0;
+                    player.bullet3Charge = 10;
+                }
+            }
+
+        },
+        kill: function() {
+            if(achievements[5][3] <= 0) {
+                achievements[5][3] = time;
+            } else {
+                if(time - achievements[5][3] < 3) achievements[5][1] = true;
+            }
+            player.isDead = true;
+            if(lives > 0) lives--;
+            player.bullet3Charge = 0;
+        }
     };
     bullets = [];
     score = 0;
@@ -128,23 +203,16 @@ function initPlayer() {
 }
 
 let angX = 0, angY = 0;
-let pickupCooldown = 20;
-let bonusScore = {
-    amount: 0,
-    drawTime: 0,
-    blinks: -1
-};
-let waveCompleteTime = 0;
 function update(dt) {
     if(pause) return;
 
     time += dt;
     pickupCooldown -= dt;
-    if(bonusScore.drawTime > 0) {
-        bonusScore.drawTime -= dt;
-    } else if(bonusScore.blinks >= 0) {
-        bonusScore.blinks--;
-        bonusScore.drawTime = 0.5;
+    if(bonusScoreDisplay.drawTime > 0) {
+        bonusScoreDisplay.drawTime -= dt;
+    } else if(bonusScoreDisplay.blinks >= 0) {
+        bonusScoreDisplay.blinks--;
+        bonusScoreDisplay.drawTime = 0.5;
     }
     if(waveCompleteTime > 0) waveCompleteTime -= dt;
 
@@ -173,15 +241,19 @@ function update(dt) {
     }
 
     if(asteroids.length == 0) {
-        level++;
-        lives++;
-        score += 5000;
-        bonusScore.amount = 5000;
-        bonusScore.blinks = 3;
-        a.snd.win.play();
-        a.snd.win.currentTime = 0;
-        waveCompleteTime = 2;
-        generateAsteroidWave(level);
+        if(waveCompleteTime <= 0) {
+            if(achievements[0][3] == 0) achievements[0][1] = true;
+            achievements[0][3] = 0;
+            level++;
+            lives++;
+            score += 1250*level;
+            bonusScoreDisplay.amount = 1250*level;
+            bonusScoreDisplay.blinks = 3;
+            a.snd.win.play();
+            a.snd.win.currentTime = 0;
+            waveCompleteTime = 3;
+        }
+        if(waveCompleteTime < 1.5) generateAsteroidWave(level);
     }
 
     function movePlayer() {
@@ -196,6 +268,7 @@ function update(dt) {
         player.y -= angY * c;
 
         if(keysDown["w"] || keysDown["W"]) {
+            achievements[0][3] = 1;
             angX = Math.sin(degToRad(player.rot));
             angY = Math.cos(degToRad(player.rot));
 
@@ -204,6 +277,7 @@ function update(dt) {
                 player.velocity = player.maxSpeed;
             }
         } else if(keysDown["s"] || keysDown["S"]) {
+            achievements[0][3] = 1;
             angX = Math.sin(degToRad(player.rot));
             angY = Math.cos(degToRad(player.rot));
 
@@ -272,6 +346,19 @@ function update(dt) {
                 player.bullet2CooldownCurrent = player.bullet2Cooldown * dt;
             }
         }
+        if(!player.isDead && player.bullet3Charge >= 10) {
+            if(keysDown["l"] || keysDown["L"]) {
+                player.bullet3Charge = 0;
+                // shoot special
+                for(let i=0; i<360; i+=9) {
+                    let b = makeBullet(a.img.bullet2, 2.5, 2, 500);
+                    b.rot = i;
+                    b.size = 7;
+                    bullets.push(b);
+                }
+                player.bullet2CooldownCurrent = player.bullet2Cooldown * dt;
+            }
+        }
     }
 
     function moveAsteroids() {
@@ -295,6 +382,9 @@ function update(dt) {
 
                     if(b.img == a.img.bullet1) explosions.push(makeExplosion(a.img.explosionBlue, b.x, b.y, 15, 4));
                     else if(b.img == a.img.bullet2) explosions.push(makeExplosion(a.img.explosionRed, b.x, b.y, 15, 8));
+
+                    // only blue bullets give charge
+                    if(b.img == a.img.bullet1) player.addCharge(0.5);
 
                     e.health -= b.damage;
                     score += 100;
@@ -333,11 +423,7 @@ function update(dt) {
                     }
 
                     // declare player dead
-                    player.isDead = true;
-                    if(lives > 0) {
-                        // remove a life if any left
-                        lives--;
-                    }
+                    player.kill();
                 }
             }
         });
@@ -347,14 +433,18 @@ function update(dt) {
                     pickups.splice(i, 1);
                     if(p.content == "score") {
                         score += p.amount;
-                        bonusScore.amount = p.amount;
-                        bonusScore.blinks = 3;
+                        bonusScoreDisplay.amount = p.amount;
+                        bonusScoreDisplay.blinks = 3;
                         a.snd.pickup.play();
                         a.snd.pickup.currentTime = 0;
                     } else if(p.content == "life") {
                         lives += p.amount;
                         a.snd.pickup2.play();
                         a.snd.pickup2.currentTime = 0;
+                    } else if(p.content == "charge") {
+                        player.addCharge(p.amount);
+                        a.snd.pickup3.play();
+                        a.snd.pickup3.currentTime = 0;
                     }
                 }
             }
@@ -376,7 +466,7 @@ function update(dt) {
     function pickupLogic() {
         if(pickupCooldown <= 0) {
             // spawn pickup
-            pickups.push(makePickup(a.img.pickup, 19));
+            pickups.push(makePickup(a.img.pickup0, 19));
             pickupCooldown = 20;
         }
 
@@ -387,6 +477,14 @@ function update(dt) {
 
             //slowly rotate em
             p.drawRot += p.speed * 0.25;
+
+            p.drawDt += dt;
+            if(p.drawDt > 1) {
+                p.drawDt = 0;
+                p.frame++;
+                // we wain either frame 0 or 1
+                p.frame %= 2;
+            }
 
             // wrap around
             if(p.x < -100) p.x = canvas.width + 100;
@@ -482,15 +580,23 @@ function makePickup(img, size) {
         y: Math.ceil(Math.random()*800) - 100,
         rot: Math.ceil(Math.random()*360),
         drawRot: Math.ceil(Math.random()*360),
+        drawDt: Math.random(),
+        frame: 0,
         size: size,
         speed: 1,
         content: "score",
         amount: 10000
     };
-    if(Math.random() < 0.1) {
+    let chance = Math.random()*100;
+    // 10% chance of a 1UP pickup
+    if(chance < 10) {
         pickup.content = "life";
         pickup.amount = 1;
+    } else if(chance < 35) { // 25% chance of getting 1/4 of a charge
+        pickup.content = "charge";
+        pickup.amount = 2.5;
     }
+    // the rest (65%) is a chance of getting 10000 score
     return pickup;
 }
 
@@ -588,6 +694,10 @@ function render() {
     drawPickups();
     drawAsteroids();
     drawExplosions();
+    if(pause) {
+        drawFont(a.img.font1, canvas.width/2 - 82.5, 150, "GAME PAUSED", 1.5);
+        drawAchievementScreen();
+    }
 
     // https://stackoverflow.com/questions/2677671/how-do-i-rotate-a-single-object-on-an-html-5-canvas#11985464
     function drawImageRot(img, x, y, width, height, deg){
@@ -602,6 +712,20 @@ function render() {
         //reset the canvas
         ctx.rotate(-rad);
         ctx.translate(-(x + width/2), -(y + height / 2));
+    }
+
+    function drawImagePartRot(img, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight, deg) {
+        // convert degrees to radian
+        var rad = degToRad(deg);
+        // set the origin to the center of the image
+        ctx.translate(dx + dWidth/2, dy + dHeight/2);
+        // rotate the canvas around the origin
+        ctx.rotate(rad);
+        //draw the image
+        ctx.drawImage(img, sx, sy, sWidth, sHeight, -dWidth/2, -dHeight/2, dWidth, dHeight);
+        //reset the canvas
+        ctx.rotate(-rad);
+        ctx.translate(-(dx + dWidth/2), -(dy + dHeight / 2));
     }
 
     function drawPlayer() {
@@ -685,7 +809,7 @@ function render() {
 
     function drawPickups() {
         pickups.forEach(function(p) {
-            drawImageRot(p.img, p.x-p.size/2, p.y-p.size/2, p.size, p.size, p.drawRot);
+            drawImagePartRot(p.img, p.size*p.frame, 0, p.size, p.size, p.x-p.size/2, p.y-p.size/2, p.size, p.size, p.drawRot);
             if(debug) {
                 // debug draw
                 ctx.beginPath();
@@ -699,21 +823,12 @@ function render() {
     function drawGUI() {
         // draw score
         drawFont(a.img.font1, canvas.width*3/4, 10, "" + score);
-        if(bonusScore.drawTime > 0.25) {
-            drawFont(a.img.font1, canvas.width*3/4, 35, "+" + bonusScore.amount);
+        if(bonusScoreDisplay.drawTime > 0.25) {
+            drawFont(a.img.font1, canvas.width*3/4, 35, "+" + bonusScoreDisplay.amount);
         }
 
-        if(lives <= 0 && player.isDead) {
-            drawFont(a.img.font1, canvas.width*3/5, canvas.height*4/5, "Boom. Dead.", 1.25);
-        }
-
-        if(pause) {
-            drawFont(a.img.font1, canvas.width/2 - 82, 150, "GAME PAUSED", 1.5);
-        }
-
-        if(waveCompleteTime > 0) {
-            drawFont(a.img.font1, canvas.width/2 - 77, 10, "Wave complete!", 1.1);
-        }
+        if(lives <= 0 && player.isDead) drawFont(a.img.font1, canvas.width*3/5, canvas.height*4/5, "Boom. Dead.", 1.25);
+        if(waveCompleteTime > 0) drawFont(a.img.font1, canvas.width/2 - 77, 10, "Wave complete!", 1.1);
 
         //draw remaining lives
         for(let i=0; i<lives; i++) {
@@ -722,6 +837,16 @@ function render() {
 
         //draw wave count
         drawFont(a.img.font1, 10, canvas.height-30, "Wave " + level);
+
+        //draw special charge bar
+        let startX = canvas.width/2 - player.bullet3maxCharge*10/2;
+        for(let i=0; i<player.bullet3maxCharge; i++) {
+            if(i-player.bullet3Charge <= -1)
+                ctx.drawImage(a.img.barFull, startX + i*10, canvas.height-26, 10, 20);
+            else
+                ctx.drawImage(a.img.barEmpty, startX + i*10, canvas.height-26, 10, 20);
+
+        }
     }
 
     function drawDebug() {
@@ -736,6 +861,28 @@ function render() {
         ctx.beginPath();
         ctx.strokeStyle = '#FFCC00';
         ctx.strokeRect(canvas.width/2 - safeDistance, canvas.height/2 - safeDistance, safeDistance*2, safeDistance*2);
+    }
+
+    function drawAchievementScreen() {
+        let startX = canvas.width/2 - 236/2;
+        let j = 0;
+        let startY = 200;
+        for(let i=0; i<achievements.length; i++) {
+            if(achievements[i][1]) ctx.drawImage(a.img.achievement1, startX+j*50, startY, 36, 36);
+            else ctx.drawImage(a.img.achievement0, startX+j*50, startY, 36, 36);
+
+            if(selectedAchievement == i) ctx.drawImage(a.img.achievementS, startX+j*50, startY, 36, 36);
+
+            j++;
+            if(j >= 5) {
+                j=0; startY += 50;
+            }
+        }
+
+        let aTitle = achievements[selectedAchievement][0];
+        let aText = achievements[selectedAchievement][2];
+        drawFont(a.img.font1, canvas.width/2 - aTitle.length*10/2, startY+50, aTitle);
+        drawFont(a.img.font1, canvas.width/2 - aText.length*0.9*10/2, startY+80, aText, 0.9);
     }
 
 }
@@ -763,6 +910,41 @@ addEventListener("keydown", function (e) {
 addEventListener("keyup", function (e) {
 	delete keysDown[e.key];
     if(e.key == "u" || e.key == "U") debug = !debug;
-    if(e.key == "p" || e.key == "P") pause = !pause;
+    if(e.key == "p" || e.key == "P") {
+        pause = !pause;
+        saveAchievements();
+    }
     if(e.key == "r" || e.key == "R") startNewGame();
+
+    if(pause) {
+        // moving in achievements
+        if(e.key == "a" || e.key == "A") selectedAchievement--;
+        if(e.key == "d" || e.key == "D") selectedAchievement++;
+        if(e.key == "w" || e.key == "W") selectedAchievement-=5;
+        if(e.key == "s" || e.key == "S") selectedAchievement+=5;
+        if(selectedAchievement < 0) selectedAchievement += 10;
+        selectedAchievement = Math.abs(selectedAchievement%achievements.length);
+    }
 }, false);
+
+//https://stackoverflow.com/questions/14573223/set-cookie-and-get-cookie-with-javascript#24103596
+function createCookie(name, value, days) {
+    var expires = "";
+    if (days) {
+        var date = new Date();
+        date.setTime(date.getTime() + (days*24*60*60*1000));
+        expires = "; expires=" + date.toUTCString();
+    }
+    document.cookie = name + "=" + value + expires + "; path=/";
+}
+
+function readCookie(name) {
+    var nameEQ = name + "=";
+    var ca = document.cookie.split(';');
+    for(var i=0; i < ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0)==' ') c = c.substring(1,c.length);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+    }
+    return null;
+}
