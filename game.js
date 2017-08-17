@@ -28,9 +28,9 @@ window.onload = function() {
 
     achievements = [
         ["How do you turn this on", false, "Complete a wave without accelerating", 0],
-        ["Backwards compatible", false, "Complete a wave while moving only backwards"],
-        ["Not worth it", false, "Do less than 3 damage with charged shot"],
-        ["Actually worth it", false, "Do more than 20 damage with charged shot"],
+        ["Backwards compatible", false, "Complete a wave while moving only backwards", 0],
+        ["??????", false, ""],
+        ["??????", false, ""],
         ["I AM FULLY CHARGED", false, "Get an extra charge pickup while already fully charged"],
         ["Reckless driving", false, "Die twice within 3 seconds", 0],
     ];
@@ -216,6 +216,8 @@ function update(dt) {
     }
     if(waveCompleteTime > 0) waveCompleteTime -= dt;
 
+    if(player.velocity > 0) achievements[1][3] = 1;
+
     movePlayer();
     moveAsteroids();
     bulletLogic();
@@ -243,7 +245,9 @@ function update(dt) {
     if(asteroids.length == 0) {
         if(waveCompleteTime <= 0) {
             if(achievements[0][3] == 0) achievements[0][1] = true;
+            if(achievements[1][3] == 2) achievements[1][1] = true;
             achievements[0][3] = 0;
+            achievements[1][3] = 0;
             level++;
             lives++;
             score += 1250*level;
@@ -278,6 +282,7 @@ function update(dt) {
             }
         } else if(keysDown["s"] || keysDown["S"]) {
             achievements[0][3] = 1;
+            if(achievements[1][3] == 0) achievements[1][3] = 2;
             angX = Math.sin(degToRad(player.rot));
             angY = Math.cos(degToRad(player.rot));
 
