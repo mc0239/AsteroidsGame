@@ -1,12 +1,7 @@
 # AsteroidsGame
 
-A classic asteroids-style game made in javascript canvas.
+A classic asteroids-style game made in [Phaser](http://phaser.io/).
 
-[Play it now.](https://iamsilver.net/AsteroidsGame/) 
-
-### Things to do
-
-- Rework rocket and asteroid movement
-- Improve collision detection
+[Play it now. (older, JS canvas version)](https://iamsilver.net/AsteroidsGame/)
 
 ![Preview](preview.png) 
