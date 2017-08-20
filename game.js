@@ -1,6 +1,13 @@
 /* global Phaser */
 
-var game = new Phaser.Game(800, 600, Phaser.AUTO, document.getElementById("game"), { preload: preload, create: create, update: update}, true, true, null);
+var game = new Phaser.Game({
+    antialias: false,
+    height: 600,
+    parent: document.getElementById("game"),
+    state: { preload: preload, create: create, update: update },
+    transparent: true,
+    width: 800
+});
 
 var _a;
 
@@ -13,15 +20,65 @@ var time, debug = false;
 var _ui;
 
 function preload() {
+
+    loadGraphics();
+    loadAudio();
+
     _a = {
         img: {},
         snd: {}
     };
-    loadImages();
-    loadSound();
+
+    loadAchievements();
+
+    function loadGraphics() {
+        game.load.image("font1", "./img/font1.png");
+
+        game.load.spritesheet("explosionBlue", "./img/explosion_blue.png", 15, 15);
+        game.load.spritesheet("explosionRed", "./img/explosion_red.png", 15, 15);
+        game.load.spritesheet("explosionBig", "./img/explosion_big.png", 30, 30);
+
+        game.load.image("rocket1", "./img/rocket1.png");
+        game.load.image("offscreenPointer", "./img/offscreen_pointer.png");
+        game.load.image("offscreenPointerAsteroid", "./img/offscreen_pointer2.png");
+
+        game.load.image("bullet1", "./img/bullet1.png");
+        game.load.image("bullet2", "./img/bullet2.png");
+
+        game.load.image("asteroid1_1", "./img/asteroid1_1.png");
+        game.load.image("asteroid1_2", "./img/asteroid1_2.png");
+        game.load.image("asteroid1_3", "./img/asteroid1_3.png");
+        game.load.image("asteroid1_4", "./img/asteroid1_4.png");
+
+        game.load.spritesheet("pickup0", "./img/pickup0.png", 19, 19);
+
+        game.load.image("achievementOff", "./img/achievement_off.png");
+        game.load.image("achievementOn", "./img/achievement_on.png");
+        game.load.image("achievementSelect", "./img/achievement_select.png");
+
+        game.load.image("barFull", "./img/bar_full.png");
+        game.load.image("barEmpty", "./img/bar_empty.png");
+    }
+
+    function loadAudio() {
+        game.load.audio("shoot1", "./snd/shoot1.wav");
+        game.load.audio("shoot2", "./snd/shoot2.wav");
+
+        game.load.audio("explosion", "./snd/explosion.wav");
+
+        game.load.audio("win", "./snd/win.wav");
+        game.load.audio("charge", "./snd/charge.wav");
+
+        game.load.audio("pickup1", "./snd/pickup.wav");
+        game.load.audio("pickup2", "./snd/pickup2.wav");
+        game.load.audio("pickup3", "./snd/pickup3.wav");
+    }
 }
 
 function create() {
+
+    initSounds();
+
     game.input.keyboard.addKey(Phaser.Keyboard.P).onDown.add(function() {
         game.paused = !game.paused;
         saveAchievements();
@@ -36,41 +93,121 @@ function create() {
         startNewGame();
     }, this);
 
-    loadAchievements();
-
     game.physics.startSystem(Phaser.Physics.ARCADE);
 
-    _a.snd.shoot1 = game.add.audio("shoot1");
-    _a.snd.shoot2 = game.add.audio("shoot2");
-    _a.snd.explosion = game.add.audio("explosion");
-    _a.snd.win = game.add.audio("win");
-    _a.snd.pickup1 = game.add.audio("pickup1");
-    _a.snd.pickup2 = game.add.audio("pickup2");
-    _a.snd.pickup3 = game.add.audio("pickup3");
+    createPlayer();
 
-    initPlayer();
-
-
+    // TODO: generate everything ahead for reusing objects when game plays
+    //       (there were some problems with make*() functions...)
     bullets = game.add.group();
     bullets.enableBody = true;
     bullets.physicsBodyType = Phaser.Physics.ARCADE;
+    //bullets.createMultiple(50, "bullet1");
 
     asteroids = game.add.group();
     asteroids.enableBody = true;
     asteroids.physicsBodyType = Phaser.Physics.ARCADE;
+    //asteroids.createMultiple(20, "asteroid1_1");
 
     pickups = game.add.group();
     pickups.enableBody = true;
     pickups.physicsBodyType = Phaser.Physics.ARCADE;
+    //pickups.createMultiple(10, "pickup0");
 
     explosions = game.add.group();
+    //explosions.createMultiple(20, "explosionBlue");
 
     startNewGame();
-    initUI();
+
+    createUI();
+
+    function initSounds() {
+        _a.snd.shoot1 = game.add.audio("shoot1");
+        _a.snd.shoot2 = game.add.audio("shoot2");
+        _a.snd.explosion = game.add.audio("explosion");
+        _a.snd.win = game.add.audio("win");
+        _a.snd.charge = game.add.audio("charge");
+        _a.snd.pickup1 = game.add.audio("pickup1");
+        _a.snd.pickup2 = game.add.audio("pickup2");
+        _a.snd.pickup3 = game.add.audio("pickup3");
+    }
+
+    function createPlayer() {
+        player = game.add.sprite(game.width/2, game.height/2, "rocket1");
+        player.data = {
+            offscreenPointer: game.add.sprite(0, 0, "offscreenPointer"),
+
+            bullet1Cooldown: 0.3,
+            bullet1CooldownCurrent: 0,
+            bullet2Cooldown: 1.5,
+            bullet2CooldownCurrent: 0,
+            bullet3Charge: 0,
+            bullet3maxCharge: 10,
+
+            addCharge: function(amount) {
+                if(player.bullet3Charge < 10) {
+                    player.bullet3Charge += amount;
+                    if(player.bullet3Charge >= 10) {
+                        _a.snd.charge.play();
+                        player.bullet3Charge = 10;
+                    }
+                }
+
+            },
+            kill: function() {
+                player.kill();
+                if(lives > 0) lives--;
+                player.bullet3Charge = 0;
+            },
+            reset: function() {
+                player.reset(game.width/2, game.height/2);
+                player.rotation = 0;
+            }
+        };
+
+        player.anchor.set(0.5);
+        game.physics.enable(player, Phaser.Physics.ARCADE);
+        player.body.setCircle(player.texture.width/2, 0, 0);
+        player.body.drag.set(250);
+        player.body.maxVelocity.set(250);
+
+        player.data.offscreenPointer.visible = false;
+    }
+
+    function createUI() {
+        _ui = {};
+        _ui.score = makeText("kek: " + score, game.width*3/4, 10);
+        _ui.waveCount = makeText("Wave " + level, 10, game.height-30);
+        _ui.pauseTitle = makeText("GAME PAUSED", game.width/2, 150, 3);
+        _ui.pauseTitle.image.anchor.setTo(0.5, 0);
+        _ui.pauseTitle.image.visible = false;
+
+        _ui.waveComplete = makeText("Wave complete!", game.width/2, 10, 2.2);
+        _ui.waveComplete.image.anchor.setTo(0.5, 0);
+        _ui.waveComplete.image.visible = false;
+
+        _ui.bonusScore = makeText("", game.width*3/4, 35);
+        _ui.bonusScore.amount = 0;
+        _ui.bonusScore.blinks = -1;
+        _ui.bonusScore.drawTime = 0;
+
+        _ui.deathNotice = makeText("Boom. Dead.", game.width/2, game.height/2, 2.5);
+        _ui.deathNotice.image.anchor.set(0.5);
+        _ui.deathNotice.image.visible = false;
+
+        _ui.lives = game.add.group();
+
+        _ui.debug = game.add.group();
+        _ui.debug.playerX = game.add.text(2, 0, Math.round(player.x*1000)/1000, {font: "8px sans-serif", fill: "white"}, _ui.debug);
+        _ui.debug.playerY = game.add.text(2, 10, Math.round(player.y*1000)/1000, {font: "8px sans-serif", fill: "white"}, _ui.debug);
+        _ui.debug.time = game.add.text(2, 20, Math.floor(time), {font: "8px sans-serif", fill: "white"}, _ui.debug);
+        _ui.debug.visible = false;
+
+    }
 }
 
 function startNewGame() {
-    player.reset();
+    player.data.reset();
     score = 0;
     lives = 3;
     level = 1;
@@ -84,37 +221,6 @@ function startNewGame() {
     pickups.killAll();
     explosions.removeAll(true);
     generateAsteroidWave(level);
-}
-
-function initUI() {
-    _ui = {};
-    _ui.score = makeText("kek: " + score, game.width*3/4, 10);
-    _ui.waveCount = makeText("Wave " + level, 10, game.height-30);
-    _ui.pauseTitle = makeText("GAME PAUSED", game.width/2, 150, 3);
-    _ui.pauseTitle.image.anchor.setTo(0.5, 0);
-    _ui.pauseTitle.image.visible = false;
-
-    _ui.waveComplete = makeText("Wave complete!", game.width/2, 10, 2.2);
-    _ui.waveComplete.image.anchor.setTo(0.5, 0);
-    _ui.waveComplete.image.visible = false;
-
-    _ui.bonusScore = makeText("", game.width*3/4, 35);
-    _ui.bonusScore.amount = 0;
-    _ui.bonusScore.blinks = -1;
-    _ui.bonusScore.drawTime = 0;
-
-    _ui.deathNotice = makeText("Boom. Dead.", game.width/2, game.height/2, 2.5);
-    _ui.deathNotice.image.anchor.set(0.5);
-    _ui.deathNotice.image.visible = false;
-
-    _ui.lives = game.add.group();
-
-    _ui.debug = game.add.group();
-    _ui.debug.playerX = game.add.text(2, 0, Math.round(player.sprite.x*1000)/1000, {font: "8px sans-serif", fill: "white"}, _ui.debug);
-    _ui.debug.playerY = game.add.text(2, 10, Math.round(player.sprite.y*1000)/1000, {font: "8px sans-serif", fill: "white"}, _ui.debug);
-    _ui.debug.time = game.add.text(2, 20, Math.floor(time), {font: "8px sans-serif", fill: "white"}, _ui.debug);
-    _ui.debug.visible = false;
-
 }
 
 function makeText(text, x, y, scale = 2) {
@@ -170,9 +276,9 @@ function updateUI() {
     }
 
     // draw pointers
-    drawOffScreenPointer(player.sprite, player.offscreenPointer);
+    drawOffScreenPointer(player, player.data.offscreenPointer);
     asteroids.forEach(function(a) {
-        drawOffScreenPointer(a, a.offscreenPointer);
+        drawOffScreenPointer(a, a.data.offscreenPointer);
     }, this, true);
 
     if(debug) drawDebug();
@@ -188,7 +294,7 @@ function drawDebug() {
     pickups.forEach(function(p){
         game.debug.body(p);
     }, this, true);
-    game.debug.body(player.sprite);
+    game.debug.body(player);
 
     _ui.debug.time.text = Math.floor(time);
     _ui.debug.playerX = Math.round(player.x*1000)/1000;
@@ -207,8 +313,8 @@ function update() {
     checkCollision();
     updateUI();
 
-    if(!player.sprite.alive && lives > 0) {
-        player.sprite.reset(game.width/2, game.height/2);
+    if(!player.alive && lives > 0) {
+        player.data.reset();
     }
 
     // when all asteroids are cleared, bring on next level
@@ -229,53 +335,54 @@ function update() {
 
     function movePlayer() {
         if (game.input.keyboard.isDown(Phaser.KeyCode.W)) {
-            game.physics.arcade.accelerationFromRotation(player.sprite.rotation - Math.PI/2, 200, player.sprite.body.acceleration);
+            game.physics.arcade.accelerationFromRotation(player.rotation - Math.PI/2, 200, player.body.acceleration);
         } else {
-            player.sprite.body.acceleration.set(0);
+            player.body.acceleration.set(0);
         }
 
         if (game.input.keyboard.isDown(Phaser.KeyCode.A)) {
-            player.sprite.body.angularVelocity = -100;
+            player.body.angularVelocity = -150;
         } else if (game.input.keyboard.isDown(Phaser.KeyCode.D)) {
-            player.sprite.body.angularVelocity = 100;
+            player.body.angularVelocity = 150;
         } else {
-            player.sprite.body.angularVelocity = 0;
+            player.body.angularVelocity = 0;
         }
 
-        wrapAround(player.sprite);
+        wrapAround(player);
     }
 
     function bulletLogic() {
         bullets.forEach(wrapAround, this, true);
         bullets.forEach(function(b) {
-            b.distance--;
+            b.data.distance -= game.time.physicsElapsed;
             // if distance is covered, remove bullet
-            if(b.distance < 0) bullets.remove(b, true);
+            if(b.data.distance < 0) b.kill();
         }, this, true);
         // player shooting bullets
-        if(player.bullet1CooldownCurrent > 0) player.bullet1CooldownCurrent -= game.time.physicsElapsed;
-        if(player.sprite.alive && player.bullet1CooldownCurrent <= 0) {
+        if(player.data.bullet1CooldownCurrent > 0) player.data.bullet1CooldownCurrent -= game.time.physicsElapsed;
+        if(player.alive && player.data.bullet1CooldownCurrent <= 0) {
             if(game.input.keyboard.isDown(Phaser.KeyCode.J)) {
                 // shoot bullet
-                makeBullet("bullet1", 1, 500, 110);
+                makeBullet("bullet1", 1, 500, 1.8);
                 _a.snd.shoot1.play();
-                player.bullet1CooldownCurrent = player.bullet1Cooldown;
+                player.data.bullet1CooldownCurrent = player.data.bullet1Cooldown;
             }
         }
-        if(player.bullet2CooldownCurrent > 0) player.bullet2CooldownCurrent -= game.time.physicsElapsed;
-        if(player.sprite.alive && player.bullet2CooldownCurrent <= 0) {
+        if(player.data.bullet2CooldownCurrent > 0) player.data.bullet2CooldownCurrent -= game.time.physicsElapsed;
+        if(player.alive && player.data.bullet2CooldownCurrent <= 0) {
             if(game.input.keyboard.isDown(Phaser.KeyCode.K)) {
                 // shoot bullets (alt)
-                for(let i=0; i<360; i+=36) {
-                    makeBullet("bullet2", 2, 156, 100, i);
+                let fullRot = 2*Math.PI;
+                for(let i=0; i<fullRot; i+=fullRot/10) {
+                    makeBullet("bullet2", 2, 156, 1.6, i);
                 }
                 _a.snd.shoot2.play();
-                player.bullet2CooldownCurrent = player.bullet2Cooldown;
+                player.data.bullet2CooldownCurrent = player.data.bullet2Cooldown;
             }
         }
-        if(player.sprite.alive && player.bullet3Charge >= 10) {
+        if(player.alive && player.data.bullet3Charge >= 10) {
             if(game.input.keyboard.isDown(Phaser.KeyCode.L)) {
-                player.bullet3Charge = 0;
+                player.data.bullet3Charge = 0;
                 // TODO: shoot special
             }
         }
@@ -298,7 +405,7 @@ function update() {
 
     function checkCollision() {
         game.physics.arcade.overlap(bullets, asteroids, function(b, a) {
-            a.health -= b.damage;
+            a.health -= b.data.damage;
             score += 100;
 
             if(a.health <= 0) {
@@ -311,79 +418,36 @@ function update() {
             }
             if(b.key == "bullet1") {
                 makeExplosion("explosionBlue", b.x, b.y, 0.5);
-                player.addCharge(0.5);
+                player.data.addCharge(0.5);
             }
             else if(b.key == "bullet2") makeExplosion("explosionRed", b.x, b.y, 0.75);
             b.kill();
         });
-        game.physics.arcade.overlap(player.sprite, asteroids, function(plr, a) {
+        game.physics.arcade.overlap(player, asteroids, function(plr, a) {
             if(plr.alive) {
                 // TODO: make explosions on player's death
                 for(let i=0; i<3; i++) {
-                    makeExplosion("explosionBig", player.sprite.x + random(-15, 15), player.sprite.y + random(-15, 15), random(1.2, 1.6), random(10, 60));
+                    makeExplosion("explosionBig", player.x + random(-15, 15), player.y + random(-15, 15), random(1.2, 1.6), random(10, 60));
                 }
-                player.kill();
+                player.data.kill();
             }
         });
-        game.physics.arcade.overlap(player.sprite, pickups, function(plr, pic) {
+        game.physics.arcade.overlap(player, pickups, function(plr, pic) {
             if(plr.alive) {
-                if(pic.content == "score") {
-                    giveBonusScore(pic.amount);
+                if(pic.data.content == "score") {
+                    giveBonusScore(pic.data.amount);
                     _a.snd.pickup1.play();
-                } else if(pic.content == "life") {
-                    lives += pic.amount;
+                } else if(pic.data.content == "life") {
+                    lives += pic.data.amount;
                     _a.snd.pickup2.play();
-                } else if(pic.content == "charge") {
-                    player.addCharge(pic.amount);
+                } else if(pic.data.content == "charge") {
+                    player.data.addCharge(pic.data.amount);
                     _a.snd.pickup3.play();
                 }
                 pic.kill();
             }
         });
     }
-}
-
-function loadImages() {
-    _a.img.font1 = game.load.image("font1", "./img/font1.png");
-
-    game.load.spritesheet("explosionBlue", "./img/explosion_blue.png", 15, 15);
-    game.load.spritesheet("explosionRed", "./img/explosion_red.png", 15, 15);
-    game.load.spritesheet("explosionBig", "./img/explosion_big.png", 30, 30);
-
-    _a.img.rocket1 = game.load.image("rocket1", "./img/rocket1.png");
-    _a.img.offscreenPointer = game.load.image("offscreenPointer", "./img/offscreen_pointer.png");
-    _a.img.offscreenPointerAsteroid =game.load.image("offscreenPointerAsteroid", "./img/offscreen_pointer2.png");
-
-    _a.img.bullet1 = game.load.image("bullet1", "./img/bullet1.png");
-    _a.img.bullet2 = game.load.image("bullet2", "./img/bullet2.png");
-
-    _a.img.asteroid1_1 = game.load.image("asteroid1_1", "./img/asteroid1_1.png");
-    _a.img.asteroid1_2 = game.load.image("asteroid1_2", "./img/asteroid1_2.png");
-    _a.img.asteroid1_3 = game.load.image("asteroid1_3", "./img/asteroid1_3.png");
-    _a.img.asteroid1_4 = game.load.image("asteroid1_4", "./img/asteroid1_4.png");
-
-    game.load.spritesheet("pickup0", "./img/pickup0.png", 19, 19);
-
-    _a.img.achievementOff = game.load.image("achievementOff", "./img/achievement_off.png");
-    _a.img.achievementOn = game.load.image("achievementOn", "./img/achievement_on.png");
-    _a.img.achievementSelect = game.load.image("achievementSelect", "./img/achievement_select.png");
-
-    _a.img.barFull = game.load.image("barFull", "./img/bar_full.png");
-    _a.img.barEmpty = game.load.image("barEmpty", "./img/bar_empty.png");
-}
-
-function loadSound() {
-    game.load.audio("shoot1", "./snd/shoot1.wav");
-    game.load.audio("shoot2", "./snd/shoot2.wav");
-
-    game.load.audio("explosion", "./snd/explosion.wav");
-
-    game.load.audio("win", "./snd/win.wav");
-    _a.snd.charge = game.load.audio("charge", "./snd/charge.wav");
-
-    game.load.audio("pickup1", "./snd/pickup.wav");
-    game.load.audio("pickup2", "./snd/pickup2.wav");
-    game.load.audio("pickup3", "./snd/pickup3.wav");
 }
 
 function wrapAround(sprite) {
@@ -433,59 +497,18 @@ function drawOffScreenPointer(sprite, pointer) {
     }
 }
 
-function initPlayer() {
-    // TODO: put all this into one object, like asteroid..
-    player = {
-        sprite: game.add.sprite(game.width/2, game.height/2, "rocket1"),
-        offscreenPointer: game.add.sprite(0, 0, "offscreenPointer"),
-
-        bullet1Cooldown: 0.3,
-        bullet1CooldownCurrent: 0,
-        bullet2Cooldown: 1.5,
-        bullet2CooldownCurrent: 0,
-        bullet3Charge: 0,
-        bullet3maxCharge: 10,
-
-        addCharge: function(amount) {
-            if(player.bullet3Charge < 10) {
-                player.bullet3Charge += amount;
-                if(player.bullet3Charge >= 10) {
-                    _a.snd.charge.play();
-                    player.bullet3Charge = 10;
-                }
-            }
-
-        },
-        kill: function() {
-            player.sprite.kill();
-            if(lives > 0) lives--;
-            player.bullet3Charge = 0;
-        },
-        reset: function() {
-            player.sprite.reset(game.width/2, game.height/2);
-            player.sprite.rotation = 0;
-        }
-    };
-    player.sprite.anchor.set(0.5);
-
-    game.physics.enable(player.sprite, Phaser.Physics.ARCADE);
-    player.sprite.body.drag.set(250);
-    player.sprite.body.maxVelocity.set(250);
-
-    player.offscreenPointer.visible = false;
-}
-
-function makeBullet(img, damage, speed, distance, angle = player.sprite.rotation) {
+function makeBullet(img, damage, speed, distance, angle = player.rotation) {
     let b = bullets.getFirstDead();
     if(b == null) {
-        b = game.add.sprite(player.sprite.x, player.sprite.y, img, undefined, bullets);
+        b = game.add.sprite(player.x, player.y, img, undefined, bullets);
         b.anchor.set(0.5);
     } else {
         b.loadTexture(img, 0);
-        b.reset(player.sprite.x, player.sprite.y);
+        b.reset(player.x, player.y);
     }
-    b.damage = damage;
-    b.distance = distance;
+    b.data.damage = damage;
+    b.data.distance = distance;
+    b.body.setCircle(b.texture.width/2, 0, 0);
     game.physics.arcade.velocityFromRotation(angle - Math.PI/2, speed, b.body.velocity);
     return b;
 }
@@ -520,20 +543,21 @@ function makePickup(img, x = random(-100, game.width+100), y = random(-100, game
         p.frame = 0;
     }
 
-    p.content = "score";
-    p.amount = 10000;
+    p.data.content = "score";
+    p.data.amount = 10000;
 
     p.animations.play("blink", 1, true, false);
+    p.body.setCircle(p.texture.width/2/p.animations.frameTotal, 0, 0);
     game.physics.arcade.velocityFromRotation(random(0, 2*Math.PI) - Math.PI/2, 50, p.body.velocity);
 
     let chance = random(0, 100);
     // 10% chance of a 1UP pickup
     if(chance < 10) {
-        p.content = "life";
-        p.amount = 1;
+        p.data.content = "life";
+        p.data.amount = 1;
     } else if(chance < 35) { // 25% chance of getting 1/4 of a charge
-        p.content = "charge";
-        p.amount = 2.5;
+        p.data.content = "charge";
+        p.data.amount = 2.5;
     }
     // the rest (65%) is a chance of getting 10000 score
     return p;
@@ -547,17 +571,19 @@ function makeAsteroid(size, img, x, y, speed, health, scale) {
     } else {
         a.reset(x, y);
         a.loadTexture(img, 0);
-        a.offscreenPointer.visible = false;
+        a.data.offscreenPointer.visible = false;
     }
 
     a.health = health;
     // scale is relative to asteroid's sprite size
     a.scale.set(scale);
     a.size = size;
+
+    a.body.setCircle(a.texture.width * scale /2, 0, 0);
     game.physics.arcade.velocityFromRotation(random(0, 2*Math.PI) - Math.PI/2, speed, a.body.velocity);
 
-    a.offscreenPointer = game.add.sprite(0, 0, "offscreenPointerAsteroid");
-    a.offscreenPointer.visible = false;
+    a.data.offscreenPointer = game.add.sprite(0, 0, "offscreenPointerAsteroid");
+    a.data.offscreenPointer.visible = false;
     return a;
 }
 
