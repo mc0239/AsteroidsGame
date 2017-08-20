@@ -29,8 +29,6 @@ function preload() {
         snd: {}
     };
 
-    loadAchievements();
-
     function loadGraphics() {
         game.load.image("font1", "./img/font1.png");
 
@@ -77,15 +75,19 @@ function preload() {
         game.load.audio("pickup1", "./snd/pickup.wav");
         game.load.audio("pickup2", "./snd/pickup2.wav");
         game.load.audio("pickup3", "./snd/pickup3.wav");
+
+        game.load.audio("click", "./snd/click.wav");
     }
 }
 
+// order inside create function also dictates draw order
 function create() {
 
     initSounds();
 
     game.input.keyboard.addKey(Phaser.Keyboard.P).onDown.add(function() {
         game.paused = !game.paused;
+        _ui.achievementScreen.visible = game.paused;
         saveAchievements();
         updateUI();
     }, this);
@@ -98,21 +100,36 @@ function create() {
         startNewGame();
     }, this);
 
+    game.input.keyboard.addKey(Phaser.Keyboard.W).onDown.add(function() {
+        if(game.paused) moveAchievementSelect(-5);
+    }, this);
+    game.input.keyboard.addKey(Phaser.Keyboard.A).onDown.add(function() {
+        if(game.paused) moveAchievementSelect(-1);
+    }, this);
+    game.input.keyboard.addKey(Phaser.Keyboard.S).onDown.add(function() {
+        if(game.paused) moveAchievementSelect(+5);
+    }, this);
+    game.input.keyboard.addKey(Phaser.Keyboard.D).onDown.add(function() {
+        if(game.paused) moveAchievementSelect(+1);
+    }, this);
+
     game.physics.startSystem(Phaser.Physics.ARCADE);
 
     createPlayer();
 
+    createUI();
+
     // TODO: generate everything ahead for reusing objects when game plays
     //       (there were some problems with make*() functions...)
-    bullets = game.add.group();
-    bullets.enableBody = true;
-    bullets.physicsBodyType = Phaser.Physics.ARCADE;
-    //bullets.createMultiple(50, "bullet1");
-
     asteroids = game.add.group();
     asteroids.enableBody = true;
     asteroids.physicsBodyType = Phaser.Physics.ARCADE;
     //asteroids.createMultiple(20, "asteroid1_1");
+
+    bullets = game.add.group();
+    bullets.enableBody = true;
+    bullets.physicsBodyType = Phaser.Physics.ARCADE;
+    //bullets.createMultiple(50, "bullet1");
 
     pickups = game.add.group();
     pickups.enableBody = true;
@@ -122,9 +139,12 @@ function create() {
     explosions = game.add.group();
     //explosions.createMultiple(20, "explosionBlue");
 
+    player.bringToTop();
+
+    loadAchievements();
+
     startNewGame();
 
-    createUI();
 
     function initSounds() {
         _a.snd.shoot1 = game.add.audio("shoot1");
@@ -137,6 +157,7 @@ function create() {
         _a.snd.pickup1 = game.add.audio("pickup1");
         _a.snd.pickup2 = game.add.audio("pickup2");
         _a.snd.pickup3 = game.add.audio("pickup3");
+        _a.snd.click = game.add.audio("click");
     }
 
     function createPlayer() {
@@ -211,8 +232,29 @@ function create() {
 
         _ui.lives = game.add.group();
         _ui.chargeBar = game.add.group();
-        let sx = game.width/2 - player.data.bullet3maxCharge*10/2;
-        for(let i=0; i<player.data.bullet3maxCharge; i++) game.add.image(sx + i*10, game.height-26, "chargeBar", 0, _ui.chargeBar);
+        for(let i=0; i<player.data.bullet3maxCharge; i++) game.add.image((game.width/2 - player.data.bullet3maxCharge*10/2) + i*10, game.height-26, "chargeBar", 0, _ui.chargeBar);
+
+        _ui.achievementScreen = game.add.group();
+        _ui.achievementScreen.data = {};
+        _ui.achievementScreen.data.startX = game.width/2 - 5*56/2;
+        _ui.achievementScreen.data.startY = 200;
+        _ui.achievementScreen.data.selectedAchievement = 0;
+        _ui.achievementScreen.data.selector = game.add.image(_ui.achievementScreen.data.startX+(_ui.achievementScreen.data.selectedAchievement%5)*56, _ui.achievementScreen.data.startY+(Math.floor(_ui.achievementScreen.data.selectedAchievement/5))*56, "achievementSelect", undefined, _ui.achievementScreen);
+        let j = 0;
+        let sy = _ui.achievementScreen.data.startY;
+        for(let i=0; i<achievements.length; i++) {
+            game.add.image(_ui.achievementScreen.data.startX+j*56, sy, "achievementOff", undefined, _ui.achievementScreen);
+            j++;
+            if(j >= 5) {
+                j=0; sy += 56;
+            }
+        }
+        _ui.achievementScreen.data.selector.bringToTop();
+        _ui.achievementScreen.data.title = makeText(achievements[_ui.achievementScreen.data.selectedAchievement].title, game.width/2, sy+100, undefined, _ui.achievementScreen);
+        _ui.achievementScreen.data.description = makeText(achievements[_ui.achievementScreen.data.selectedAchievement].description, game.width/2, sy+140, 1.8, _ui.achievementScreen);
+        _ui.achievementScreen.data.title.image.anchor.set(0.5);
+        _ui.achievementScreen.data.description.image.anchor.set(0.5);
+        _ui.achievementScreen.visible = false;
 
         _ui.debug = game.add.group();
         _ui.debug.playerX = game.add.text(2, 0, Math.round(player.x*1000)/1000, {font: "8px sans-serif", fill: "white"}, _ui.debug);
@@ -231,7 +273,7 @@ function startNewGame() {
     time = 0;
 
     waveCompleteCooldown = 0;
-    pickupCooldown = 0;
+    pickupCooldown = 10;
 
     bullets.killAll();
     asteroids.killAll();
@@ -240,10 +282,10 @@ function startNewGame() {
     generateAsteroidWave(level);
 }
 
-function makeText(text, x, y, scale = 2) {
+function makeText(text, x, y, scale = 2, group) {
     let t = {};
     t.font = game.add.retroFont("font1", 5, 12, " !\"#$%&`()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_'abcdefghijklmnopqrstuvwxyz{|}~", 20);
-    t.image = game.add.image(x, y, t.font);
+    t.image = game.add.image(x, y, t.font, undefined, group);
 
     t.font.autoUpperCase = false;
     t.font.text = text;
@@ -300,8 +342,6 @@ function updateUI() {
             c.frame = 1;
         }
     }
-
-
 
     // draw pointers
     drawOffScreenPointer(player, player.data.offscreenPointer, player.rotation);
@@ -447,7 +487,7 @@ function update() {
         if(pickupCooldown <= 0) {
             // spawn pickup
             makePickup("pickup0");
-            pickupCooldown = 20;
+            pickupCooldown = 15;
         }
     }
 
@@ -706,19 +746,35 @@ function random(min, max) {
 
 // TODO: implement achievements
 var achievements = [
-    ["How do you turn this on", false, "Complete a wave without accelerating", 0],
-    ["Backwards compatible", false, "Complete a wave while moving only backwards", 0],
-    ["??????", false, ""],
-    ["??????", false, ""],
-    ["I AM FULLY CHARGED", false, "Get an extra charge pickup while already fully charged"],
-    ["Reckless driving", false, "Die twice within 3 seconds", 0],
+    { title: "How do you turn this on", description: "Complete a wave without accelerating", has: false, condition: 0 },
+    { title: "Backwards compatible", description: "Complete a wave while moving only backwards", has: false, condition: 0 },
+    { title: "??????", description: "", has: false, condition: 0 },
+    { title: "I AM FULLY CHARGED", description: "Get an extra charge pickup while already fully charged", has: false, condition: 0 },
+    { title: "Reckless driving", description: "Die twice within 3 seconds", has: false, condition: 0 },
+    { title: "??????", description: "", has: false, condition: 0 },
+    { title: "??????", description: "", has: false, condition: 0 },
 ];
-var selectedAchievement = 0;
+
+function moveAchievementSelect(moveBy) {
+    _ui.achievementScreen.data.selectedAchievement += moveBy;
+    if(_ui.achievementScreen.data.selectedAchievement < 0) _ui.achievementScreen.data.selectedAchievement += 10;
+    _ui.achievementScreen.data.selectedAchievement = Math.abs(_ui.achievementScreen.data.selectedAchievement%achievements.length);
+    _ui.achievementScreen.data.selector.position.setTo(_ui.achievementScreen.data.startX+(_ui.achievementScreen.data.selectedAchievement%5)*56, _ui.achievementScreen.data.startY+(Math.floor(_ui.achievementScreen.data.selectedAchievement/5))*56);
+    updateText(_ui.achievementScreen.data.title, achievements[_ui.achievementScreen.data.selectedAchievement].title);
+    updateText(_ui.achievementScreen.data.description, achievements[_ui.achievementScreen.data.selectedAchievement].description);
+    _a.snd.click.play();
+}
+
+function giveAchievement(index) {
+    let achi = _ui.achievementScreen.getAt(index);
+    achievements[index].has = true;
+    achi.loadTexture("achievementOn");
+}
 
 function saveAchievements() {
     let t = "";
     for(let i=0; i<achievements.length; i++) {
-        if(achievements[i][1]) t += "" + 1;
+        if(achievements[i].has) t += "" + 1;
         else t += "" + 0;
     }
     createCookie("ach", t, 365);
@@ -728,36 +784,8 @@ function loadAchievements() {
     let t = readCookie("ach");
     if(t == null) return;
     for(let i=0; i<t.length; i++) {
-        if(t[i] == 1) achievements[i][1] = true;
+        if(t[i] == 1) giveAchievement(i);
     }
-}
-
-function render_old() {
-
-    // TODO: re-implement achievements screen
-    /*
-    function drawAchievementScreen() {
-        let startX = canvas.width/2 - 236/2;
-        let j = 0;
-        let startY = 200;
-        for(let i=0; i<achievements.length; i++) {
-            if(achievements[i][1]) ctx.drawImage(a.img.achievement1, startX+j*50, startY, 36, 36);
-            else ctx.drawImage(a.img.achievement0, startX+j*50, startY, 36, 36);
-
-            if(selectedAchievement == i) ctx.drawImage(a.img.achievementS, startX+j*50, startY, 36, 36);
-
-            j++;
-            if(j >= 5) {
-                j=0; startY += 50;
-            }
-        }
-
-        let aTitle = achievements[selectedAchievement][0];
-        let aText = achievements[selectedAchievement][2];
-        drawFont(a.img.font1, canvas.width/2 - aTitle.length*10/2, startY+50, aTitle);
-        drawFont(a.img.font1, canvas.width/2 - aText.length*0.9*10/2, startY+80, aText, 0.9);
-    }
-    */
 }
 
 //https://stackoverflow.com/questions/14573223/set-cookie-and-get-cookie-with-javascript#24103596
