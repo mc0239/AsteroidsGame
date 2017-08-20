@@ -36,6 +36,8 @@ function preload() {
 
         game.load.spritesheet("explosionBlue", "./img/explosion_blue.png", 15, 15);
         game.load.spritesheet("explosionRed", "./img/explosion_red.png", 15, 15);
+        game.load.spritesheet("explosionGreen", "./img/explosion_green.png", 15, 15);
+        game.load.spritesheet("explosionGreenBig", "./img/explosion_green_big.png", 30, 30);
         game.load.spritesheet("explosionBig", "./img/explosion_big.png", 30, 30);
 
         game.load.image("rocket1", "./img/rocket1.png");
@@ -44,6 +46,8 @@ function preload() {
 
         game.load.image("bullet1", "./img/bullet1.png");
         game.load.image("bullet2", "./img/bullet2.png");
+        game.load.image("bullet3", "./img/bullet3.png");
+        game.load.image("bullet4", "./img/bullet4.png");
 
         game.load.image("asteroid1_1", "./img/asteroid1_1.png");
         game.load.image("asteroid1_2", "./img/asteroid1_2.png");
@@ -56,8 +60,7 @@ function preload() {
         game.load.image("achievementOn", "./img/achievement_on.png");
         game.load.image("achievementSelect", "./img/achievement_select.png");
 
-        game.load.image("barFull", "./img/bar_full.png");
-        game.load.image("barEmpty", "./img/bar_empty.png");
+        game.load.spritesheet("chargeBar", "./img/charge_bar.png", 10, 20);
     }
 
     function loadAudio() {
@@ -145,19 +148,18 @@ function create() {
             bullet3maxCharge: 10,
 
             addCharge: function(amount) {
-                if(player.bullet3Charge < 10) {
-                    player.bullet3Charge += amount;
-                    if(player.bullet3Charge >= 10) {
+                if(player.data.bullet3Charge < 10) {
+                    player.data.bullet3Charge += amount;
+                    if(player.data.bullet3Charge >= 10) {
                         _a.snd.charge.play();
-                        player.bullet3Charge = 10;
+                        player.data.bullet3Charge = 10;
                     }
                 }
-
             },
             kill: function() {
                 player.kill();
                 if(lives > 0) lives--;
-                player.bullet3Charge = 0;
+                player.data.bullet3Charge = 0;
             },
             reset: function() {
                 player.reset(game.width/2, game.height/2);
@@ -196,6 +198,9 @@ function create() {
         _ui.deathNotice.image.visible = false;
 
         _ui.lives = game.add.group();
+        _ui.chargeBar = game.add.group();
+        let sx = game.width/2 - player.data.bullet3maxCharge*10/2;
+        for(let i=0; i<player.data.bullet3maxCharge; i++) game.add.image(sx + i*10, game.height-26, "chargeBar", 0, _ui.chargeBar);
 
         _ui.debug = game.add.group();
         _ui.debug.playerX = game.add.text(2, 0, Math.round(player.x*1000)/1000, {font: "8px sans-serif", fill: "white"}, _ui.debug);
@@ -274,6 +279,17 @@ function updateUI() {
             l.visible = !(i >= lives);
         }
     }
+    // update charge bar
+    for(let i=0; i<_ui.chargeBar.length; i++) {
+        let c = _ui.chargeBar.getAt(i);
+        if(i+1 > player.data.bullet3Charge) {
+            c.frame = 0;
+        } else {
+            c.frame = 1;
+        }
+    }
+
+
 
     // draw pointers
     drawOffScreenPointer(player, player.data.offscreenPointer);
@@ -356,7 +372,16 @@ function update() {
         bullets.forEach(function(b) {
             b.data.distance -= game.time.physicsElapsed;
             // if distance is covered, remove bullet
-            if(b.data.distance < 0) b.kill();
+            if(b.data.distance < 0) {
+                if(b.key == "bullet3") {
+                    let fullRot = 2*Math.PI;
+                    for(let i=0; i<fullRot; i+=fullRot/10) {
+                        let n = makeBullet("bullet4", 2, 350, 3, i);
+                        n.position.setTo(b.x, b.y);
+                    }
+                }
+                b.kill();
+            }
         }, this, true);
         // player shooting bullets
         if(player.data.bullet1CooldownCurrent > 0) player.data.bullet1CooldownCurrent -= game.time.physicsElapsed;
@@ -373,17 +398,16 @@ function update() {
             if(game.input.keyboard.isDown(Phaser.KeyCode.K)) {
                 // shoot bullets (alt)
                 let fullRot = 2*Math.PI;
-                for(let i=0; i<fullRot; i+=fullRot/10) {
-                    makeBullet("bullet2", 2, 156, 1.6, i);
-                }
+                for(let i=fullRot*2/12; i<fullRot*11/12; i+=fullRot/12) makeBullet("bullet2", 2, 156, 1.6, player.rotation+i);
                 _a.snd.shoot2.play();
                 player.data.bullet2CooldownCurrent = player.data.bullet2Cooldown;
             }
         }
-        if(player.alive && player.data.bullet3Charge >= 10) {
+        if(player.alive && player.data.bullet3Charge >= 0.5) {
             if(game.input.keyboard.isDown(Phaser.KeyCode.L)) {
                 player.data.bullet3Charge = 0;
-                // TODO: shoot special
+                let fullRot = 2*Math.PI;
+                for(let i=0; i<fullRot; i+=fullRot/6) makeBullet("bullet3", 4, 140, 1.2, i);
             }
         }
     }
@@ -416,16 +440,27 @@ function update() {
                 }
                 a.kill();
             }
-            if(b.key == "bullet1") {
-                makeExplosion("explosionBlue", b.x, b.y, 0.5);
-                player.data.addCharge(0.5);
+            switch (b.key) {
+                case "bullet1":
+                    makeExplosion("explosionBlue", b.x, b.y, 0.5);
+                    player.data.addCharge(0.5);
+                    break;
+                case "bullet2":
+                    makeExplosion("explosionRed", b.x, b.y, 0.75);
+                    break;
+                case "bullet3":
+                    makeExplosion("explosionGreenBig", b.x, b.y, 0.75);
+                    break;
+                case "bullet4":
+                    makeExplosion("explosionGreen", b.x, b.y, 0.75);
+                    break;
+                default:
+
             }
-            else if(b.key == "bullet2") makeExplosion("explosionRed", b.x, b.y, 0.75);
             b.kill();
         });
         game.physics.arcade.overlap(player, asteroids, function(plr, a) {
             if(plr.alive) {
-                // TODO: make explosions on player's death
                 for(let i=0; i<3; i++) {
                     makeExplosion("explosionBig", player.x + random(-15, 15), player.y + random(-15, 15), random(1.2, 1.6), random(10, 60));
                 }
@@ -442,6 +477,7 @@ function update() {
                     _a.snd.pickup2.play();
                 } else if(pic.data.content == "charge") {
                     player.data.addCharge(pic.data.amount);
+
                     _a.snd.pickup3.play();
                 }
                 pic.kill();
@@ -664,17 +700,7 @@ function loadAchievements() {
 }
 
 function render_old() {
-    // TODO: re-implement draw special charge bar
-    /*
-    let startX = canvas.width/2 - player.bullet3maxCharge*10/2;
-    for(let i=0; i<player.bullet3maxCharge; i++) {
-        if(i-player.bullet3Charge <= -1)
-            ctx.drawImage(a.img.barFull, startX + i*10, canvas.height-26, 10, 20);
-        else
-            ctx.drawImage(a.img.barEmpty, startX + i*10, canvas.height-26, 10, 20);
 
-    }
-    */
     // TODO: re-implement achievements screen
     /*
     function drawAchievementScreen() {
