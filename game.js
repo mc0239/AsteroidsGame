@@ -66,8 +66,10 @@ function preload() {
     function loadAudio() {
         game.load.audio("shoot1", "./snd/shoot1.wav");
         game.load.audio("shoot2", "./snd/shoot2.wav");
+        game.load.audio("shoot3", "./snd/shoot2.wav");
 
-        game.load.audio("explosion", "./snd/explosion.wav");
+        game.load.audio("explosion1", "./snd/explosion1.wav");
+        game.load.audio("explosion2", "./snd/explosion2.wav");
 
         game.load.audio("win", "./snd/win.wav");
         game.load.audio("charge", "./snd/charge.wav");
@@ -127,7 +129,9 @@ function create() {
     function initSounds() {
         _a.snd.shoot1 = game.add.audio("shoot1");
         _a.snd.shoot2 = game.add.audio("shoot2");
-        _a.snd.explosion = game.add.audio("explosion");
+        _a.snd.shoot3 = game.add.audio("shoot3");
+        _a.snd.explosion1 = game.add.audio("explosion1");
+        _a.snd.explosion2 = game.add.audio("explosion2");
         _a.snd.win = game.add.audio("win");
         _a.snd.charge = game.add.audio("charge");
         _a.snd.pickup1 = game.add.audio("pickup1");
@@ -147,6 +151,8 @@ function create() {
             bullet3Charge: 0,
             bullet3maxCharge: 10,
 
+            invicibleTime: 0,
+
             addCharge: function(amount) {
                 if(player.data.bullet3Charge < 10) {
                     player.data.bullet3Charge += amount;
@@ -157,9 +163,14 @@ function create() {
                 }
             },
             kill: function() {
+                respawnCooldown = 2;
                 player.kill();
                 if(lives > 0) lives--;
                 player.data.bullet3Charge = 0;
+            },
+            respawn: function() {
+                player.data.reset();
+                player.data.invicibleTime = 3;
             },
             reset: function() {
                 player.reset(game.width/2, game.height/2);
@@ -171,8 +182,9 @@ function create() {
         game.physics.enable(player, Phaser.Physics.ARCADE);
         player.body.setCircle(player.texture.width/2, 0, 0);
         player.body.drag.set(250);
-        player.body.maxVelocity.set(250);
+        player.body.maxVelocity.set(200);
 
+        player.data.offscreenPointer.anchor.set(0.5);
         player.data.offscreenPointer.visible = false;
     }
 
@@ -292,7 +304,7 @@ function updateUI() {
 
 
     // draw pointers
-    drawOffScreenPointer(player, player.data.offscreenPointer);
+    drawOffScreenPointer(player, player.data.offscreenPointer, player.rotation);
     asteroids.forEach(function(a) {
         drawOffScreenPointer(a, a.data.offscreenPointer);
     }, this, true);
@@ -317,7 +329,7 @@ function drawDebug() {
     _ui.debug.playerY = Math.round(player.y*1000)/1000;
 }
 
-var waveCompleteCooldown = 0, pickupCooldown = 0;
+var waveCompleteCooldown = 0, pickupCooldown = 10, respawnCooldown = 0;
 
 function update() {
     time += game.time.physicsElapsed;
@@ -330,7 +342,17 @@ function update() {
     updateUI();
 
     if(!player.alive && lives > 0) {
-        player.data.reset();
+        respawnCooldown -= game.time.physicsElapsed;
+        if(respawnCooldown < 0)
+            player.data.respawn();
+    }
+    if(player.data.invicibleTime > 0) {
+        if(player.data.invicibleTime >= 3) game.add.tween(player).to( { alpha: 0.5 }, 100, "Linear", false, 0, -1, true);
+        player.data.invicibleTime -= game.time.physicsElapsed;
+    } else {
+        player.data.invicibleTime = 0;
+        //player.data.tween.pause();
+        player.alpha = 1;
     }
 
     // when all asteroids are cleared, bring on next level
@@ -379,6 +401,7 @@ function update() {
                         let n = makeBullet("bullet4", 2, 350, 3, i);
                         n.position.setTo(b.x, b.y);
                     }
+                    _a.snd.shoot3.play();
                 }
                 b.kill();
             }
@@ -403,11 +426,12 @@ function update() {
                 player.data.bullet2CooldownCurrent = player.data.bullet2Cooldown;
             }
         }
-        if(player.alive && player.data.bullet3Charge >= 0.5) {
+        if(player.alive && player.data.bullet3Charge >= player.data.bullet3maxCharge) {
             if(game.input.keyboard.isDown(Phaser.KeyCode.L)) {
                 player.data.bullet3Charge = 0;
                 let fullRot = 2*Math.PI;
                 for(let i=0; i<fullRot; i+=fullRot/6) makeBullet("bullet3", 4, 140, 1.2, i);
+                _a.snd.shoot3.play();
             }
         }
     }
@@ -494,7 +518,7 @@ function wrapAround(sprite) {
     if(sprite.y > game.height+100) sprite.y = -100;
 }
 
-function drawOffScreenPointer(sprite, pointer) {
+function drawOffScreenPointer(sprite, pointer, rotation = false) {
     // draw offscreen pointer
     let xm = 0, ym = 0;
     if(sprite.x < 0) xm = -1;
@@ -502,32 +526,34 @@ function drawOffScreenPointer(sprite, pointer) {
     if(sprite.y < 0) ym = -1;
     if(sprite.y > 600) ym = 1;
 
-    pointer.visible = true;
+    pointer.visible = sprite.alive;
+
+    let m = 15/2;
 
     if(xm > 0 && ym > 0) {
-        pointer.position.setTo(game.width+4, game.height-6);
-        pointer.angle = 135;
+        pointer.position.setTo(game.width-m, game.height-m);
+        pointer.rotation = rotation ? rotation: Math.PI*0.75;
     } else if(xm > 0 && ym < 0) {
-        pointer.position.setTo(game.width-4, -4);
-        pointer.angle = 45;
+        pointer.position.setTo(game.width-m, m);
+        pointer.rotation = rotation ? rotation: Math.PI*0.25;
     } else if(xm < 0 && ym > 0) {
-        pointer.position.setTo(4, game.height+4);
-        pointer.angle = -135;
+        pointer.position.setTo(m, game.height-m);
+        pointer.rotation = rotation ? rotation: -Math.PI*0.75;
     } else if(xm < 0 && ym < 0) {
-        pointer.position.setTo(-4, 6);
-        pointer.angle = -45;
+        pointer.position.setTo(m, m);
+        pointer.rotation = rotation ? rotation : -Math.PI*0.25;
     } else if(xm > 0) {
-        pointer.position.setTo(game.width, sprite.y);
-        pointer.angle = 90;
+        pointer.position.setTo(game.width-m, sprite.y);
+        pointer.rotation = rotation ? rotation : Math.PI*0.5;
     } else if(xm < 0) {
-        pointer.position.setTo(0, sprite.y);
-        pointer.angle = -90;
+        pointer.position.setTo(m, sprite.y);
+        pointer.rotation = rotation ? rotation : -Math.PI*0.5;
     } else if(ym > 0) {
-        pointer.position.setTo(sprite.x, game.height);
-        pointer.angle = 180;
+        pointer.position.setTo(sprite.x, game.height-m);
+        pointer.rotation = rotation ? rotation: Math.PI;
     } else if(ym < 0) {
-        pointer.position.setTo(sprite.x, 0);
-        pointer.angle = 0;
+        pointer.position.setTo(sprite.x, m);
+        pointer.rotation = rotation ? rotation: 0;
     } else {
         pointer.visible = false;
     }
@@ -563,7 +589,10 @@ function makeExplosion(img, x, y, scale = 1, frameRate = 20) {
 
     e.scale.set(scale);
     e.animations.play("explode", frameRate, false, true);
-    _a.snd.explosion.play();
+
+    if(img == "explosionBig" || img == "explosionGreenBig") _a.snd.explosion2.play();
+    else _a.snd.explosion1.play();
+
     return e;
 }
 
@@ -614,6 +643,10 @@ function makeAsteroid(size, img, x, y, speed, health, scale) {
     // scale is relative to asteroid's sprite size
     a.scale.set(scale);
     a.size = size;
+
+    a.events.onKilled.add(function(a) {
+        a.data.offscreenPointer.visible = false;
+    });
 
     a.body.setCircle(a.texture.width * scale /2, 0, 0);
     game.physics.arcade.velocityFromRotation(random(0, 2*Math.PI) - Math.PI/2, speed, a.body.velocity);
