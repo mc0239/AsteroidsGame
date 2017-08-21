@@ -175,6 +175,7 @@ function create() {
             invicibleTime: 0,
 
             addCharge: function(amount) {
+                if(player.data.bullet3Charge >= 1) achievements[6].condition = false;
                 if(player.data.bullet3Charge < 10) {
                     player.data.bullet3Charge += amount;
                     if(player.data.bullet3Charge >= 10) {
@@ -187,11 +188,13 @@ function create() {
                 respawnCooldown = 2;
                 player.kill();
                 if(lives > 0) lives--;
+                if(player.data.bullet3Charge >= player.data.bullet3maxCharge) if(!achievements[5].has) giveAchievement(5);
                 player.data.bullet3Charge = 0;
             },
             respawn: function() {
                 player.data.reset();
                 player.data.invicibleTime = 3;
+                player.data.tween.resume();
             },
             reset: function() {
                 player.reset(game.width/2, game.height/2);
@@ -207,6 +210,9 @@ function create() {
 
         player.data.offscreenPointer.anchor.set(0.5);
         player.data.offscreenPointer.visible = false;
+
+        player.data.tween = game.add.tween(player).to( { alpha: 0.5 }, 300, "Linear", false, 0, -1, true);
+        player.data.tween.start().pause();
     }
 
     function createUI() {
@@ -271,6 +277,8 @@ function startNewGame() {
     lives = 3;
     level = 1;
     time = 0;
+
+    resetAchievementProgress();
 
     waveCompleteCooldown = 0;
     pickupCooldown = 10;
@@ -386,12 +394,12 @@ function update() {
         if(respawnCooldown < 0)
             player.data.respawn();
     }
+    //console.log(player.data.invicibleTime);
     if(player.data.invicibleTime > 0) {
-        if(player.data.invicibleTime >= 3) game.add.tween(player).to( { alpha: 0.5 }, 100, "Linear", false, 0, -1, true);
         player.data.invicibleTime -= game.time.physicsElapsed;
-    } else {
+    } else if(player.data.tween.isRunning) {
         player.data.invicibleTime = 0;
-        //player.data.tween.pause();
+        player.data.tween.pause();
         player.alpha = 1;
     }
 
@@ -404,12 +412,19 @@ function update() {
             giveBonusScore(1250 * level);
             _a.snd.win.play();
             waveCompleteCooldown = 3;
+
+            if(!achievements[0].has && achievements[0].condition) giveAchievement(0);
+            if(!achievements[7].has) if(time - achievements[7].condition <= 5) giveAchievement(7);
         }
         if(waveCompleteCooldown < 1) {
             generateAsteroidWave(level);
             waveCompleteCooldown = 0;
         }
     }
+
+    if(player.body.acceleration.x != 0 || player.body.acceleration.y != 0) achievements[0].condition = false;
+    if(!achievements[3].has) if(lives >= 10) giveAchievement(3);
+    if(!achievements[9].has) if(score >= 10000000) giveAchievement(9);
 
     function movePlayer() {
         if (game.input.keyboard.isDown(Phaser.KeyCode.W)) {
@@ -524,7 +539,7 @@ function update() {
             b.kill();
         });
         game.physics.arcade.overlap(player, asteroids, function(plr, a) {
-            if(plr.alive) {
+            if(plr.alive && plr.data.invicibleTime <= 0) {
                 for(let i=0; i<3; i++) {
                     makeExplosion("explosionBig", player.x + random(-15, 15), player.y + random(-15, 15), random(1.2, 1.6), random(10, 60));
                 }
@@ -540,8 +555,8 @@ function update() {
                     lives += pic.data.amount;
                     _a.snd.pickup2.play();
                 } else if(pic.data.content == "charge") {
+                    if(player.data.bullet3Charge >= player.data.bullet3maxCharge) if(!achievements[1].has) giveAchievement(1);
                     player.data.addCharge(pic.data.amount);
-
                     _a.snd.pickup3.play();
                 }
                 pic.kill();
@@ -725,7 +740,15 @@ var levels = [
 ];
 
 function generateAsteroidWave(level) {
-    //asteroids.removeAll(true);
+    if(!achievements[0].has) achievements[0].condition = true;
+    if(!achievements[4].has && level >= 20) giveAchievement(4);
+    if(!achievements[6].has) {
+        if(achievements[6].condition === false || achievements[6].condition === undefined) achievements[6].condition = 0;
+        else achievements[6].condition++;
+        if(achievements[6].condition >= 3) giveAchievement(6);
+    }
+    if(!achievements[7].has) achievements[7].condition = time;
+
     let j = 0;
     if(level > 14) {
         j = level-14;
@@ -746,13 +769,16 @@ function random(min, max) {
 
 // TODO: implement achievements
 var achievements = [
-    { title: "How do you turn this on", description: "Complete a wave without accelerating", has: false, condition: 0 },
-    { title: "Backwards compatible", description: "Complete a wave while moving only backwards", has: false, condition: 0 },
-    { title: "??????", description: "", has: false, condition: 0 },
-    { title: "I AM FULLY CHARGED", description: "Get an extra charge pickup while already fully charged", has: false, condition: 0 },
-    { title: "Reckless driving", description: "Die twice within 3 seconds", has: false, condition: 0 },
-    { title: "??????", description: "", has: false, condition: 0 },
-    { title: "??????", description: "", has: false, condition: 0 },
+    { title: "How do you turn this on", description: "Complete a wave without accelerating.", has: false, condition: undefined },
+    { title: "I AM FULLY CHARGED", description: "Get a charge pickup while already fully charged.", has: false, condition: undefined },
+    { title: "Respawnot", description: "Die shortly after respawning.", has: false, condition: undefined },
+    { title: "Life is just another currency", description: "Accumulate 10+ lives.", has: false, condition: undefined },
+    { title: "It's getting crowded here", description: "Get to wave 20", has: false, condition: undefined },
+    { title: "Pop it don't drop it", description: "Die with a full charge", has: false, condition: undefined },
+    { title: "Zero charge game", description: "Complete 3 waves without gaining any charge.", has: false, condition: undefined },
+    { title: "Excuse me, just passing through", description: "Finish a wave in a very short time.", has: false, condition: undefined },
+    { title: "Oops didn't mean to", description: "Do little to no damage with charged shot.", has: false, condition: undefined },
+    { title: "10 000 000", description: "Protip: If you make a game, don't name it 10 000 000.", has: false, condition: undefined },
 ];
 
 function moveAchievementSelect(moveBy) {
@@ -765,10 +791,14 @@ function moveAchievementSelect(moveBy) {
     _a.snd.click.play();
 }
 
-function giveAchievement(index) {
+function giveAchievement(index, silent = false) {
     let achi = _ui.achievementScreen.getAt(index);
     achievements[index].has = true;
     achi.loadTexture("achievementOn");
+}
+
+function resetAchievementProgress() {
+    for(let i=0; i<achievements.length; i++) achievements[i].condition = undefined;
 }
 
 function saveAchievements() {
@@ -784,7 +814,7 @@ function loadAchievements() {
     let t = readCookie("ach");
     if(t == null) return;
     for(let i=0; i<t.length; i++) {
-        if(t[i] == 1) giveAchievement(i);
+        if(t[i] == 1) giveAchievement(i, true);
     }
 }
 
