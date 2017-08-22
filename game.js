@@ -190,11 +190,13 @@ function create() {
                 if(lives > 0) lives--;
                 if(player.data.bullet3Charge >= player.data.bullet3maxCharge) if(!achievements[5].has) giveAchievement(5);
                 player.data.bullet3Charge = 0;
+                if(!achievements[2].has) if(time - achievements[2].condition < 3.5) giveAchievement(2);
             },
             respawn: function() {
                 player.data.reset();
                 player.data.invicibleTime = 3;
                 player.data.tween.resume();
+                achievements[2].condition = time;
             },
             reset: function() {
                 player.reset(game.width/2, game.height/2);
@@ -425,6 +427,7 @@ function update() {
     if(player.body.acceleration.x != 0 || player.body.acceleration.y != 0) achievements[0].condition = false;
     if(!achievements[3].has) if(lives >= 10) giveAchievement(3);
     if(!achievements[9].has) if(score >= 10000000) giveAchievement(9);
+    if(!achievements[8].has) if(achievements[8].condition > 100) giveAchievement(8);
 
     function movePlayer() {
         if (game.input.keyboard.isDown(Phaser.KeyCode.W)) {
@@ -486,6 +489,7 @@ function update() {
                 player.data.bullet3Charge = 0;
                 let fullRot = 2*Math.PI;
                 for(let i=0; i<fullRot; i+=fullRot/6) makeBullet("bullet3", 4, 140, 1.2, i);
+                achievements[8].condition = 0;
                 _a.snd.shoot3.play();
             }
         }
@@ -529,9 +533,11 @@ function update() {
                     break;
                 case "bullet3":
                     makeExplosion("explosionGreenBig", b.x, b.y, 0.75);
+                    achievements[8].condition += b.data.damage;
                     break;
                 case "bullet4":
                     makeExplosion("explosionGreen", b.x, b.y, 0.75);
+                    achievements[8].condition += b.data.damage;
                     break;
                 default:
 
@@ -767,7 +773,6 @@ function random(min, max) {
     return Math.random()*(max-min) + min;
 }
 
-// TODO: implement achievements
 var achievements = [
     { title: "How do you turn this on", description: "Complete a wave without accelerating.", has: false, condition: undefined },
     { title: "I AM FULLY CHARGED", description: "Get a charge pickup while already fully charged.", has: false, condition: undefined },
@@ -777,7 +782,7 @@ var achievements = [
     { title: "Pop it don't drop it", description: "Die with a full charge", has: false, condition: undefined },
     { title: "Zero charge game", description: "Complete 3 waves without gaining any charge.", has: false, condition: undefined },
     { title: "Excuse me, just passing through", description: "Finish a wave in a very short time.", has: false, condition: undefined },
-    { title: "Oops didn't mean to", description: "Do little to no damage with charged shot.", has: false, condition: undefined },
+    { title: "Just some spacedust", description: "Do a lot of damage with charged shot.", has: false, condition: undefined },
     { title: "10 000 000", description: "Protip: If you make a game, don't name it 10 000 000.", has: false, condition: undefined },
 ];
 
