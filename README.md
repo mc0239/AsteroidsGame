@@ -2,8 +2,6 @@
 
 Inspired by classic asteroids-style game, made in [Phaser](http://phaser.io/).
 
-[Play it now.](https://iamsilver.net/AsteroidsGame/)
-
 ### What is currently done
 
 - Three different shoot/bullet types ("weapons")
